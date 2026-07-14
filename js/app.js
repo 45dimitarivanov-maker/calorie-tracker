@@ -13,7 +13,8 @@
     const STORAGE_KEYS = {
         FOOD_ENTRIES: 'calorieTracker_foodEntries',
         SETTINGS: 'calorieTracker_settings',
-        API_KEY: 'calorieTracker_apiKey'
+        API_KEY: 'calorieTracker_apiKey',
+        RECENT_FOODS: 'calorieTracker_recentFoods'
     };
 
     const DEFAULT_SETTINGS = {
@@ -375,8 +376,19 @@
         
         if (!loadingOverlay) return;
         
+        if (typeof show === 'string') {
+            // Called as showLoading(text)
+            text = show;
+            show = true;
+        }
+        
         loadingOverlay.hidden = !show;
         if (loadingText) loadingText.textContent = text || 'Analyzing...';
+    }
+    
+    function hideLoading() {
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) loadingOverlay.hidden = true;
     }
 
     function showToast(message, duration) {
@@ -813,16 +825,361 @@
     var state = {
         proposedEntries: [],
         settings: {},
-        isProcessing: false
+        isProcessing: false,
+        selectedDate: getTodayKey(),
+        recentFoods: [],
+        barcodeScanner: null,
+        isScannerActive: false
     };
+
+    // ==========================================
+    // BARCODE SCANNER MODULE
+    // ==========================================
+
+    function initBarcodeScanner() {
+        // Check if Html5Qrcode is available
+        if (typeof Html5Qrcode === 'undefined') {
+            console.warn('Html5Qrcode library not loaded');
+            return false;
+        }
+        return true;
+    }
+
+    function startBarcodeScanner() {
+        if (!initBarcodeScanner()) {
+            showToast('Barcode scanner not available', 3000);
+            return;
+        }
+
+        var readerElement = document.getElementById('barcodeReader');
+        if (!readerElement) return;
+
+        if (state.barcodeScanner) {
+            state.barcodeScanner.stop().catch(function() {});
+        }
+
+        state.barcodeScanner = new Html5Qrcode('barcodeReader');
+        state.isScannerActive = true;
+
+        var config = {
+            fps: 10,
+            qrbox: { width: 250, height: 100 },
+            aspectRatio: 1.0,
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_128
+            ]
+        };
+
+        state.barcodeScanner.start(
+            { facingMode: 'environment' },
+            config,
+            onBarcodeScanned,
+            function(errorMessage) {
+                // Ignore scan errors (happens frequently during scanning)
+            }
+        ).catch(function(err) {
+            console.error('Error starting scanner:', err);
+            showToast('Could not access camera. Please allow camera access.', 4000);
+            state.isScannerActive = false;
+        });
+    }
+
+    function stopBarcodeScanner() {
+        if (state.barcodeScanner && state.isScannerActive) {
+            state.barcodeScanner.stop().then(function() {
+                state.isScannerActive = false;
+            }).catch(function(err) {
+                console.error('Error stopping scanner:', err);
+            });
+        }
+    }
+
+    function onBarcodeScanned(barcode, result) {
+        // Stop scanner immediately to prevent multiple scans
+        stopBarcodeScanner();
+        showToast('Barcode detected: ' + barcode, 2000);
+        
+        // Look up product in Open Food Facts
+        lookupBarcode(barcode);
+    }
+
+    function lookupBarcode(barcode) {
+        showLoading('Looking up product...');
+        
+        var url = 'https://world.openfoodfacts.org/api/v2/product/' + barcode + '.json';
+        
+        fetch(url)
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                hideLoading();
+                
+                if (data.status === 1 && data.product) {
+                    showProductPreview(data.product, barcode);
+                } else {
+                    showToast('Product not found in database', 3000);
+                    // Offer to enter manually
+                    offerManualEntry(barcode);
+                }
+            })
+            .catch(function(error) {
+                hideLoading();
+                console.error('Error looking up barcode:', error);
+                showToast('Error looking up product. Check your internet connection.', 3000);
+            });
+    }
+
+    function showProductPreview(product, barcode) {
+        var name = product.product_name || product.product_name_en || 'Unknown Product';
+        var brand = product.brands || '';
+        var nutriments = product.nutriments || {};
+        
+        // Get nutrition per 100g
+        var caloriesPer100g = nutriments['energy-kcal_100g'] || nutriments['energy_100g'] / 4.184 || 0;
+        var proteinPer100g = nutriments['proteins_100g'] || 0;
+        var carbsPer100g = nutriments['carbohydrates_100g'] || 0;
+        var fatPer100g = nutriments['fat_100g'] || 0;
+        
+        // Get serving size
+        var servingSize = product.serving_size || '100g';
+        var servingQuantity = parseFloat(product.serving_quantity) || 100;
+        
+        // Calculate per serving
+        var ratio = servingQuantity / 100;
+        var caloriesPerServing = Math.round(caloriesPer100g * ratio);
+        var proteinPerServing = Math.round(proteinPer100g * ratio * 10) / 10;
+        var carbsPerServing = Math.round(carbsPer100g * ratio * 10) / 10;
+        var fatPerServing = Math.round(fatPer100g * ratio * 10) / 10;
+        
+        // Create entry for proposed section
+        var entry = {
+            name: brand ? brand + ' ' + name : name,
+            quantity: servingQuantity,
+            unit: 'g',
+            calories: caloriesPerServing,
+            protein: proteinPerServing,
+            carbs: carbsPerServing,
+            fat: fatPerServing,
+            barcode: barcode
+        };
+        
+        // Add to proposed entries
+        state.proposedEntries = [entry];
+        renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
+        
+        showToast('Found: ' + entry.name, 2000);
+    }
+
+    function offerManualEntry(barcode) {
+        // Switch to manual entry mode
+        var manualEntryForm = document.getElementById('manualEntryForm');
+        var manualEntryToggle = document.getElementById('manualEntryToggle');
+        
+        if (manualEntryForm && manualEntryToggle) {
+            manualEntryForm.hidden = false;
+            manualEntryToggle.hidden = true;
+        }
+    }
+
+    // ==========================================
+    // DATE NAVIGATION HELPERS
+    // ==========================================
+
+    function formatDateKey(dateKey) {
+        var date = new Date(dateKey + 'T12:00:00');
+        var today = getTodayKey();
+        var yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        var yesterdayKey = yesterday.toISOString().split('T')[0];
+        
+        if (dateKey === today) {
+            return 'Today';
+        } else if (dateKey === yesterdayKey) {
+            return 'Yesterday';
+        } else {
+            var options = { weekday: 'short', month: 'short', day: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+    }
+
+    function changeDate(offset) {
+        var date = new Date(state.selectedDate + 'T12:00:00');
+        date.setDate(date.getDate() + offset);
+        state.selectedDate = date.toISOString().split('T')[0];
+        updateDateNavigationUI();
+        refreshDataForDate(state.selectedDate);
+    }
+
+    function goToToday() {
+        state.selectedDate = getTodayKey();
+        updateDateNavigationUI();
+        refreshDataForDate(state.selectedDate);
+    }
+
+    function updateDateNavigationUI() {
+        var dateDisplay = document.getElementById('dateDisplay');
+        var todayBtn = document.getElementById('todayBtn');
+        var nextDayBtn = document.getElementById('nextDayBtn');
+        
+        if (dateDisplay) {
+            dateDisplay.textContent = formatDateKey(state.selectedDate);
+        }
+        
+        var isToday = state.selectedDate === getTodayKey();
+        
+        if (todayBtn) {
+            todayBtn.hidden = isToday;
+        }
+        
+        // Disable next button if viewing today
+        if (nextDayBtn) {
+            nextDayBtn.disabled = isToday;
+            nextDayBtn.style.opacity = isToday ? '0.3' : '1';
+        }
+        
+        // Update section title
+        var sectionTitle = document.querySelector('.section-title');
+        if (sectionTitle) {
+            sectionTitle.textContent = isToday ? "Today's Food" : formatDateKey(state.selectedDate) + "'s Food";
+        }
+    }
+
+    function refreshDataForDate(dateKey) {
+        var entries = getEntriesForDate(dateKey);
+        var totalCalories = getTotalCalories(dateKey);
+        var totalMacros = getTotalMacros(dateKey);
+        
+        renderFoodLog(entries, handleDeleteEntry);
+        updateProgressRing(totalCalories, state.settings.dailyGoal);
+        updateMacroSummary(totalMacros, state.settings);
+    }
+
+    // ==========================================
+    // QUICK ADD / RECENT FOODS HELPERS
+    // ==========================================
+
+    function getRecentFoods() {
+        try {
+            var data = localStorage.getItem(STORAGE_KEYS.RECENT_FOODS);
+            return data ? JSON.parse(data) : [];
+        } catch (error) {
+            console.error('Error reading recent foods:', error);
+            return [];
+        }
+    }
+
+    function saveRecentFood(entry) {
+        var recent = getRecentFoods();
+        
+        // Check if food already exists (by name)
+        var existingIndex = recent.findIndex(function(f) {
+            return f.name.toLowerCase() === entry.name.toLowerCase();
+        });
+        
+        // If exists, remove it (will add to front)
+        if (existingIndex !== -1) {
+            recent.splice(existingIndex, 1);
+        }
+        
+        // Add to front of array
+        recent.unshift({
+            name: entry.name,
+            quantity: entry.quantity,
+            unit: entry.unit,
+            calories: entry.calories,
+            protein: entry.protein || 0,
+            carbs: entry.carbs || 0,
+            fat: entry.fat || 0
+        });
+        
+        // Keep only last 10 items
+        if (recent.length > 10) {
+            recent = recent.slice(0, 10);
+        }
+        
+        try {
+            localStorage.setItem(STORAGE_KEYS.RECENT_FOODS, JSON.stringify(recent));
+        } catch (error) {
+            console.error('Error saving recent foods:', error);
+        }
+        
+        return recent;
+    }
+
+    function renderQuickAddChips() {
+        var quickAddSection = document.getElementById('quickAddSection');
+        var quickAddChips = document.getElementById('quickAddChips');
+        
+        if (!quickAddSection || !quickAddChips) return;
+        
+        var recentFoods = getRecentFoods();
+        
+        if (recentFoods.length === 0) {
+            quickAddSection.hidden = true;
+            return;
+        }
+        
+        quickAddSection.hidden = false;
+        quickAddChips.innerHTML = '';
+        
+        recentFoods.slice(0, 6).forEach(function(food, index) {
+            var chip = document.createElement('button');
+            chip.className = 'quick-add-chip';
+            chip.innerHTML = 
+                '<span class="quick-add-chip-name">' + escapeHtml(food.name) + '</span>' +
+                '<span class="quick-add-chip-calories">' + food.calories + ' kcal</span>';
+            
+            chip.addEventListener('click', function() {
+                handleQuickAdd(food);
+            });
+            
+            quickAddChips.appendChild(chip);
+        });
+    }
+
+    function handleQuickAdd(food) {
+        // Only allow quick add on today
+        if (state.selectedDate !== getTodayKey()) {
+            showToast('Switch to Today to add food', 3000);
+            goToToday();
+            return;
+        }
+        
+        var entry = {
+            name: food.name,
+            quantity: food.quantity,
+            unit: food.unit,
+            calories: food.calories,
+            protein: food.protein || 0,
+            carbs: food.carbs || 0,
+            fat: food.fat || 0
+        };
+        
+        var saved = saveEntry(entry, state.selectedDate);
+        
+        if (saved) {
+            saveRecentFood(entry);
+            refreshDataForDate(state.selectedDate);
+            showToast('Added ' + food.name, 2000);
+        } else {
+            showToast('Failed to add food', 3000);
+        }
+    }
 
     function init() {
         console.log('Initializing Calorie Tracker...');
         
         state.settings = getSettings();
+        state.selectedDate = getTodayKey();
         
-        updateDateDisplay();
-        refreshData();
+        updateDateNavigationUI();
+        refreshDataForDate(state.selectedDate);
+        renderQuickAddChips();
         
         loadSettingsIntoForm(state.settings, getApiKey());
         
@@ -841,13 +1198,8 @@
     }
 
     function refreshData() {
-        var entries = getTodayEntries();
-        var totalCalories = getTotalCalories();
-        var totalMacros = getTotalMacros();
-        
-        renderFoodLog(entries, handleDeleteEntry);
-        updateProgressRing(totalCalories, state.settings.dailyGoal);
-        updateMacroSummary(totalMacros, state.settings);
+        refreshDataForDate(state.selectedDate);
+        renderQuickAddChips();
     }
 
     function updateMacroSummary(consumed, settings) {
@@ -954,9 +1306,11 @@
             fatGoalInput.addEventListener('input', updateCalculatedCaloriesDisplay);
         }
         
-        // Input mode toggle (voice/text)
+        // Input mode toggle (voice/text/scan)
         var voiceToggle = document.getElementById('voiceToggle');
         var textToggle = document.getElementById('textToggle');
+        var scanToggle = document.getElementById('scanToggle');
+        var stopScanBtn = document.getElementById('stopScanBtn');
         
         if (voiceToggle) {
             voiceToggle.addEventListener('click', function() {
@@ -966,6 +1320,17 @@
         if (textToggle) {
             textToggle.addEventListener('click', function() {
                 setInputMode('text');
+            });
+        }
+        if (scanToggle) {
+            scanToggle.addEventListener('click', function() {
+                setInputMode('scan');
+            });
+        }
+        if (stopScanBtn) {
+            stopScanBtn.addEventListener('click', function() {
+                stopBarcodeScanner();
+                setInputMode('voice');
             });
         }
         
@@ -1012,6 +1377,29 @@
                 setVoiceLanguage('en-US');
             });
         }
+        
+        // Date navigation buttons
+        var prevDayBtn = document.getElementById('prevDayBtn');
+        var nextDayBtn = document.getElementById('nextDayBtn');
+        var todayBtn = document.getElementById('todayBtn');
+        
+        if (prevDayBtn) {
+            prevDayBtn.addEventListener('click', function() {
+                changeDate(-1);
+            });
+        }
+        
+        if (nextDayBtn) {
+            nextDayBtn.addEventListener('click', function() {
+                changeDate(1);
+            });
+        }
+        
+        if (todayBtn) {
+            todayBtn.addEventListener('click', function() {
+                goToToday();
+            });
+        }
     }
 
     function setVoiceLanguage(lang) {
@@ -1040,22 +1428,40 @@
     function setInputMode(mode) {
         var voiceToggle = document.getElementById('voiceToggle');
         var textToggle = document.getElementById('textToggle');
+        var scanToggle = document.getElementById('scanToggle');
         var voiceInputContainer = document.getElementById('voiceInputContainer');
         var textInputContainer = document.getElementById('textInputContainer');
+        var scanInputContainer = document.getElementById('scanInputContainer');
+        
+        // Reset all toggles
+        if (voiceToggle) voiceToggle.classList.remove('active');
+        if (textToggle) textToggle.classList.remove('active');
+        if (scanToggle) scanToggle.classList.remove('active');
+        
+        // Hide all containers
+        if (voiceInputContainer) voiceInputContainer.hidden = true;
+        if (textInputContainer) textInputContainer.hidden = true;
+        if (scanInputContainer) scanInputContainer.hidden = true;
+        
+        // Stop scanner if switching away from scan mode
+        if (mode !== 'scan' && state.isScannerActive) {
+            stopBarcodeScanner();
+        }
         
         if (mode === 'voice') {
-            voiceToggle.classList.add('active');
-            textToggle.classList.remove('active');
-            voiceInputContainer.hidden = false;
-            textInputContainer.hidden = true;
-        } else {
-            voiceToggle.classList.remove('active');
-            textToggle.classList.add('active');
-            voiceInputContainer.hidden = true;
-            textInputContainer.hidden = false;
+            if (voiceToggle) voiceToggle.classList.add('active');
+            if (voiceInputContainer) voiceInputContainer.hidden = false;
+        } else if (mode === 'text') {
+            if (textToggle) textToggle.classList.add('active');
+            if (textInputContainer) textInputContainer.hidden = false;
             // Focus the text input
             var foodTextInput = document.getElementById('foodTextInput');
             if (foodTextInput) foodTextInput.focus();
+        } else if (mode === 'scan') {
+            if (scanToggle) scanToggle.classList.add('active');
+            if (scanInputContainer) scanInputContainer.hidden = false;
+            // Start the barcode scanner
+            startBarcodeScanner();
         }
     }
 
@@ -1188,6 +1594,8 @@
         var saved = saveEntry(entry);
         
         if (saved) {
+            // Save to recent foods for quick add
+            saveRecentFood(entry);
             state.proposedEntries.splice(index, 1);
             renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
             refreshData();
@@ -1222,6 +1630,11 @@
 
     function handleAddAllProposed() {
         if (state.proposedEntries.length === 0) return;
+        
+        // Save all to recent foods first
+        state.proposedEntries.forEach(function(entry) {
+            saveRecentFood(entry);
+        });
         
         var saved = saveEntries(state.proposedEntries);
         
