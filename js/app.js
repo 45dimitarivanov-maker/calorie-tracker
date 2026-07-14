@@ -741,7 +741,7 @@
             return Promise.reject(new Error('OpenAI API key not configured. Please add your API key in Settings.'));
         }
         
-        var systemPrompt = 'You are a nutrition assistant that parses food descriptions and estimates calories and macronutrients.\n\nWhen given a description of food, extract each food item and estimate its nutritional values.\n\nIMPORTANT RULES:\n1. Extract EACH distinct food item separately\n2. Estimate realistic values based on the specified weight/quantity\n3. If quantity/grams is mentioned, CALCULATE nutrition based on that exact amount\n4. Return ONLY valid JSON, no other text\n5. All macro values should be in grams\n6. Pay attention to RAW vs COOKED - raw foods often have different calorie density than cooked\n\nReturn a JSON array with this exact structure:\n[\n  {\n    "name": "Food name",\n    "quantity": 1,\n    "unit": "g",\n    "calories": 100,\n    "protein": 10,\n    "carbs": 15,\n    "fat": 5,\n    "notes": ""\n  }\n]\n\nCRITICAL NUTRITION REFERENCES (per 100g):\n\n** RAW/UNCOOKED GRAINS & STARCHES (per 100g raw) **\n- Rice (raw/uncooked): 360 kcal, 7g protein, 79g carbs, 0.6g fat\n- Pasta (raw/uncooked): 350 kcal, 12g protein, 72g carbs, 1.5g fat\n- Oats (raw): 389 kcal, 17g protein, 66g carbs, 7g fat\n- Quinoa (raw): 368 kcal, 14g protein, 64g carbs, 6g fat\n- Buckwheat (raw): 343 kcal, 13g protein, 72g carbs, 3g fat\n\n** COOKED GRAINS (per 100g cooked) **\n- Rice (cooked): 130 kcal, 2.7g protein, 28g carbs, 0.3g fat\n- Pasta (cooked): 131 kcal, 5g protein, 25g carbs, 1g fat\n\n** MEAT - RAW (per 100g raw) **\n- Chicken breast (raw): 120 kcal, 22g protein, 0g carbs, 2.6g fat\n- Chicken thigh (raw): 177 kcal, 18g protein, 0g carbs, 11g fat\n- Beef (raw, lean): 143 kcal, 21g protein, 0g carbs, 6g fat\n- Pork (raw, lean): 143 kcal, 21g protein, 0g carbs, 6g fat\n- Salmon (raw): 208 kcal, 20g protein, 0g carbs, 13g fat\n- Ground beef 80/20 (raw): 254 kcal, 17g protein, 0g carbs, 20g fat\n\n** VEGETABLES (per 100g) **\n- Cucumber: 16 kcal, 0.7g protein, 3.6g carbs, 0.1g fat\n- Tomato: 18 kcal, 0.9g protein, 3.9g carbs, 0.2g fat\n- Lettuce: 15 kcal, 1.4g protein, 2.9g carbs, 0.2g fat\n- Carrot: 41 kcal, 0.9g protein, 10g carbs, 0.2g fat\n- Potato (raw): 77 kcal, 2g protein, 17g carbs, 0.1g fat\n- Broccoli: 34 kcal, 2.8g protein, 7g carbs, 0.4g fat\n- Onion: 40 kcal, 1.1g protein, 9g carbs, 0.1g fat\n\n** DAIRY & EGGS **\n- Large egg: 70 kcal, 6g protein, 0.5g carbs, 5g fat\n- Milk (whole, per 100ml): 61 kcal, 3.2g protein, 4.8g carbs, 3.3g fat\n- Yogurt (plain): 59 kcal, 10g protein, 3.6g carbs, 0.7g fat\n- Bulgarian yogurt/kiselo mlyako: 63 kcal, 3.5g protein, 4.7g carbs, 3.5g fat\n- Cheese (feta): 264 kcal, 14g protein, 4g carbs, 21g fat\n- Sirene (Bulgarian white cheese): 250 kcal, 17g protein, 1g carbs, 20g fat\n\n** OTHER COMMON FOODS **\n- Bread (white slice ~30g): 80 kcal, 3g protein, 15g carbs, 1g fat\n- Butter (per tbsp): 100 kcal, 0g protein, 0g carbs, 11g fat\n- Olive oil (per tbsp): 120 kcal, 0g protein, 0g carbs, 14g fat\n- Honey (per tbsp): 64 kcal, 0g protein, 17g carbs, 0g fat\n- Banana: 89 kcal per 100g\n- Apple: 52 kcal per 100g\n\nIMPORTANT: When user specifies grams, MULTIPLY the per-100g values accordingly!\nExample: 150g raw chicken = 150/100 * 120 = 180 kcal, 33g protein';
+    var systemPrompt = 'You are a nutrition assistant that parses food descriptions and estimates calories, macronutrients, and FIBER.\n\nWhen given a description of food, extract each food item and estimate its nutritional values.\n\nIMPORTANT RULES:\n1. Extract EACH distinct food item separately\n2. Estimate realistic values based on the specified weight/quantity\n3. If quantity/grams is mentioned, CALCULATE nutrition based on that exact amount\n4. Return ONLY valid JSON, no other text\n5. All macro values should be in grams\n6. ALWAYS include fiber content - this is critical\n7. Pay attention to RAW vs COOKED - raw foods often have different calorie density than cooked\n\nReturn a JSON array with this exact structure:\n[\n  {\n    "name": "Food name",\n    "quantity": 1,\n    "unit": "g",\n    "calories": 100,\n    "protein": 10,\n    "carbs": 15,\n    "fat": 5,\n    "fiber": 2,\n    "notes": ""\n  }\n]\n\nCRITICAL NUTRITION REFERENCES (per 100g):\n\n** RAW/UNCOOKED GRAINS & STARCHES (per 100g raw) **\n- Rice (raw/uncooked): 360 kcal, 7g protein, 79g carbs, 0.6g fat, 1.3g fiber\n- Pasta (raw/uncooked): 350 kcal, 12g protein, 72g carbs, 1.5g fat, 3g fiber\n- Oats (raw): 389 kcal, 17g protein, 66g carbs, 7g fat, 10g fiber\n- Quinoa (raw): 368 kcal, 14g protein, 64g carbs, 6g fat, 7g fiber\n- Buckwheat (raw): 343 kcal, 13g protein, 72g carbs, 3g fat, 10g fiber\n\n** COOKED GRAINS (per 100g cooked) **\n- Rice (cooked): 130 kcal, 2.7g protein, 28g carbs, 0.3g fat, 0.4g fiber\n- Pasta (cooked): 131 kcal, 5g protein, 25g carbs, 1g fat, 1.8g fiber\n\n** MEAT - RAW (per 100g raw) **\n- Chicken breast (raw): 120 kcal, 22g protein, 0g carbs, 2.6g fat, 0g fiber\n- Chicken thigh (raw): 177 kcal, 18g protein, 0g carbs, 11g fat, 0g fiber\n- Beef (raw, lean): 143 kcal, 21g protein, 0g carbs, 6g fat, 0g fiber\n- Pork (raw, lean): 143 kcal, 21g protein, 0g carbs, 6g fat, 0g fiber\n- Salmon (raw): 208 kcal, 20g protein, 0g carbs, 13g fat, 0g fiber\n\n** VEGETABLES (per 100g) **\n- Cucumber: 16 kcal, 0.7g protein, 3.6g carbs, 0.1g fat, 0.5g fiber\n- Tomato: 18 kcal, 0.9g protein, 3.9g carbs, 0.2g fat, 1.2g fiber\n- Lettuce: 15 kcal, 1.4g protein, 2.9g carbs, 0.2g fat, 1.3g fiber\n- Carrot: 41 kcal, 0.9g protein, 10g carbs, 0.2g fat, 2.8g fiber\n- Broccoli: 34 kcal, 2.8g protein, 7g carbs, 0.4g fat, 2.6g fiber\n- Onion: 40 kcal, 1.1g protein, 9g carbs, 0.1g fat, 1.7g fiber\n\n** HIGH-FIBER FOODS **\n- Avocado: 160 kcal, 2g protein, 9g carbs, 15g fat, 7g fiber\n- Almonds: 579 kcal, 21g protein, 22g carbs, 50g fat, 12g fiber\n- Lentils (cooked): 116 kcal, 9g protein, 20g carbs, 0.4g fat, 8g fiber\n- Black beans (cooked): 132 kcal, 9g protein, 24g carbs, 0.5g fat, 8g fiber\n- Chia seeds: 486 kcal, 17g protein, 42g carbs, 31g fat, 34g fiber\n\n** DAIRY & EGGS **\n- Large egg: 70 kcal, 6g protein, 0.5g carbs, 5g fat, 0g fiber\n- Milk: 61 kcal, 3.2g protein, 4.8g carbs, 3.3g fat, 0g fiber\n- Yogurt: 59 kcal, 10g protein, 3.6g carbs, 0.7g fat, 0g fiber\n\n** FRUITS (per 100g) **\n- Banana: 89 kcal, 1.1g protein, 23g carbs, 0.3g fat, 2.6g fiber\n- Apple: 52 kcal, 0.3g protein, 14g carbs, 0.2g fat, 2.4g fiber\n- Orange: 47 kcal, 0.9g protein, 12g carbs, 0.1g fat, 2.4g fiber\n\nIMPORTANT: When user specifies grams, MULTIPLY the per-100g values accordingly!';
         
         var userPrompt = 'Parse this food description and return the JSON array with calories and macros (protein, carbs, fat in grams).\n\nCRITICAL: Use the EXACT quantity and unit specified by the user (e.g., if user says "150 grams", use quantity: 150, unit: "g"). Do NOT convert to "serving".\n\n"' + foodDescription + '"';
         
@@ -806,16 +806,17 @@
         });
     }
 
-    // Calculate total macros for a date
+    // Calculate total macros for a date (including fiber)
     function getTotalMacros(dateKey) {
         var entries = getEntriesForDate(dateKey);
         return entries.reduce(function(totals, entry) {
             return {
                 protein: totals.protein + (entry.protein || 0),
                 carbs: totals.carbs + (entry.carbs || 0),
-                fat: totals.fat + (entry.fat || 0)
+                fat: totals.fat + (entry.fat || 0),
+                fiber: totals.fiber + (entry.fiber || 0)
             };
-        }, { protein: 0, carbs: 0, fat: 0 });
+        }, { protein: 0, carbs: 0, fat: 0, fiber: 0 });
     }
 
     // ==========================================
@@ -1184,6 +1185,7 @@
         loadSettingsIntoForm(state.settings, getApiKey());
         
         setupEventListeners();
+        setupStickyHeader();
         
         initVoice();
         setupVoiceRecognition();
@@ -1206,17 +1208,77 @@
         var proteinConsumed = document.getElementById('proteinConsumed');
         var carbsConsumed = document.getElementById('carbsConsumed');
         var fatConsumed = document.getElementById('fatConsumed');
+        var fiberConsumed = document.getElementById('fiberConsumed');
         var proteinGoal = document.getElementById('proteinGoal');
         var carbsGoal = document.getElementById('carbsGoal');
         var fatGoal = document.getElementById('fatGoal');
+        var fiberGoal = document.getElementById('fiberGoal');
         
+        // Update text values
         if (proteinConsumed) proteinConsumed.textContent = Math.round(consumed.protein);
         if (carbsConsumed) carbsConsumed.textContent = Math.round(consumed.carbs);
         if (fatConsumed) fatConsumed.textContent = Math.round(consumed.fat);
+        if (fiberConsumed) fiberConsumed.textContent = Math.round(consumed.fiber || 0);
         
-        if (proteinGoal) proteinGoal.textContent = settings.proteinGoal || 150;
-        if (carbsGoal) carbsGoal.textContent = settings.carbsGoal || 250;
-        if (fatGoal) fatGoal.textContent = settings.fatGoal || 65;
+        var pGoal = settings.proteinGoal || 150;
+        var cGoal = settings.carbsGoal || 250;
+        var fGoal = settings.fatGoal || 65;
+        var fiGoal = settings.fiberGoal || 30;
+        
+        if (proteinGoal) proteinGoal.textContent = pGoal;
+        if (carbsGoal) carbsGoal.textContent = cGoal;
+        if (fatGoal) fatGoal.textContent = fGoal;
+        if (fiberGoal) fiberGoal.textContent = fiGoal;
+        
+        // Update progress bars
+        var proteinBar = document.getElementById('proteinBar');
+        var carbsBar = document.getElementById('carbsBar');
+        var fatBar = document.getElementById('fatBar');
+        var fiberBar = document.getElementById('fiberBar');
+        
+        if (proteinBar) proteinBar.style.width = Math.min((consumed.protein / pGoal) * 100, 100) + '%';
+        if (carbsBar) carbsBar.style.width = Math.min((consumed.carbs / cGoal) * 100, 100) + '%';
+        if (fatBar) fatBar.style.width = Math.min((consumed.fat / fGoal) * 100, 100) + '%';
+        if (fiberBar) fiberBar.style.width = Math.min(((consumed.fiber || 0) / fiGoal) * 100, 100) + '%';
+        
+        // Update sticky header
+        updateStickyHeader(consumed, settings);
+    }
+
+    function updateStickyHeader(consumed, settings) {
+        var stickyCalConsumed = document.getElementById('stickyCalConsumed');
+        var stickyCalGoal = document.getElementById('stickyCalGoal');
+        var stickyProtein = document.getElementById('stickyProtein');
+        var stickyCarbs = document.getElementById('stickyCarbs');
+        var stickyFat = document.getElementById('stickyFat');
+        
+        var totalCal = getTotalCalories(state.selectedDate);
+        
+        if (stickyCalConsumed) stickyCalConsumed.textContent = totalCal;
+        if (stickyCalGoal) stickyCalGoal.textContent = settings.dailyGoal || 2000;
+        if (stickyProtein) stickyProtein.textContent = Math.round(consumed.protein);
+        if (stickyCarbs) stickyCarbs.textContent = Math.round(consumed.carbs);
+        if (stickyFat) stickyFat.textContent = Math.round(consumed.fat);
+    }
+
+    // Sticky header scroll handler
+    function setupStickyHeader() {
+        var progressSection = document.querySelector('.progress-section');
+        var stickyHeader = document.getElementById('stickyHeader');
+        
+        if (!progressSection || !stickyHeader) return;
+        
+        var observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    stickyHeader.classList.remove('visible');
+                } else {
+                    stickyHeader.classList.add('visible');
+                }
+            });
+        }, { threshold: 0, rootMargin: '-100px 0px 0px 0px' });
+        
+        observer.observe(progressSection);
     }
 
     function setupEventListeners() {
