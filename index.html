@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calorie Tracker</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">Calorie Tracker</h1>
+                <button class="settings-btn" id="settingsBtn" aria-label="Settings">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </div>
+            <p class="date-display" id="dateDisplay"></p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Calorie Progress Section -->
+            <section class="progress-section">
+                <div class="progress-ring-container">
+                    <svg class="progress-ring" width="200" height="200">
+                        <circle class="progress-ring-bg" cx="100" cy="100" r="85" />
+                        <circle class="progress-ring-fill" id="progressRing" cx="100" cy="100" r="85" />
+                    </svg>
+                    <div class="progress-text">
+                        <span class="calories-consumed" id="caloriesConsumed">0</span>
+                        <span class="calories-label">of <span id="caloriesGoal">2000</span> kcal</span>
+                    </div>
+                </div>
+                <div class="calories-remaining" id="caloriesRemaining">
+                    <span class="remaining-value">2000</span>
+                    <span class="remaining-label">remaining</span>
+                </div>
+                
+                <!-- Daily Macro Summary -->
+                <div class="macro-summary" id="macroSummary">
+                    <div class="macro-item protein">
+                        <span class="macro-value" id="proteinConsumed">0</span>
+                        <span class="macro-label">Protein</span>
+                        <span class="macro-goal">/ <span id="proteinGoal">150</span>g</span>
+                    </div>
+                    <div class="macro-item carbs">
+                        <span class="macro-value" id="carbsConsumed">0</span>
+                        <span class="macro-label">Carbs</span>
+                        <span class="macro-goal">/ <span id="carbsGoal">250</span>g</span>
+                    </div>
+                    <div class="macro-item fat">
+                        <span class="macro-value" id="fatConsumed">0</span>
+                        <span class="macro-label">Fat</span>
+                        <span class="macro-goal">/ <span id="fatGoal">65</span>g</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Voice/Text Input Section -->
+            <section class="voice-section">
+                <div class="input-toggle">
+                    <button class="input-toggle-btn active" id="voiceToggle" data-mode="voice">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        </svg>
+                        Voice
+                    </button>
+                    <button class="input-toggle-btn" id="textToggle" data-mode="text">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                        </svg>
+                        Type
+                    </button>
+                </div>
+                
+                <!-- Voice Input -->
+                <div class="voice-input-container" id="voiceInputContainer">
+                    <div class="language-toggle">
+                        <button class="lang-btn active" id="langBG" data-lang="bg-BG" title="Български">🇧🇬 BG</button>
+                        <button class="lang-btn" id="langEN" data-lang="en-US" title="English">🇬🇧 EN</button>
+                    </div>
+                    <button class="voice-btn" id="voiceBtn" aria-label="Voice input">
+                        <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                        <div class="pulse-ring"></div>
+                    </button>
+                    <p class="voice-hint" id="voiceHint">Tap to speak what you ate</p>
+                </div>
+                
+                <!-- Text Input -->
+                <div class="text-input-container" id="textInputContainer" hidden>
+                    <form class="text-input-form" id="textInputForm">
+                        <textarea 
+                            class="text-input-field" 
+                            id="foodTextInput" 
+                            placeholder="Type what you ate, e.g.: 2 eggs, toast with butter, and a cup of coffee with milk"
+                            rows="3"
+                        ></textarea>
+                        <button type="submit" class="btn btn-primary btn-analyze" id="analyzeTextBtn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            Analyze with AI
+                        </button>
+                    </form>
+                    <p class="text-input-hint">Works with Bulgarian food names too! 🇧🇬</p>
+                </div>
+                
+                <div class="transcription-display" id="transcriptionDisplay" hidden>
+                    <p class="transcription-text" id="transcriptionText"></p>
+                    <div class="transcription-actions" id="transcriptionActions" hidden>
+                        <button class="btn btn-outline btn-sm" id="retryVoiceBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 4v6h6"></path>
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                            </svg>
+                            Retry
+                        </button>
+                        <button class="btn btn-primary btn-sm" id="confirmVoiceBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            Analyze
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Proposed Entries Section -->
+            <section class="proposed-section" id="proposedSection" hidden>
+                <div class="section-header">
+                    <h2>AI Suggestions</h2>
+                    <div class="proposed-actions">
+                        <button class="btn btn-outline" id="clearProposedBtn">Clear</button>
+                        <button class="btn btn-primary" id="addAllBtn">Add All</button>
+                    </div>
+                </div>
+                <div class="proposed-entries" id="proposedEntries"></div>
+            </section>
+
+            <!-- Manual Entry Section -->
+            <section class="manual-entry-section">
+                <button class="manual-entry-toggle" id="manualEntryToggle">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add manually
+                </button>
+                <form class="manual-entry-form" id="manualEntryForm" hidden>
+                    <div class="form-row">
+                        <input type="text" class="form-input" id="foodName" placeholder="Food name" required>
+                        <input type="number" class="form-input small" id="foodCalories" placeholder="kcal" min="0" required>
+                    </div>
+                    <div class="form-row">
+                        <input type="number" class="form-input small" id="foodQuantity" placeholder="Qty" min="0" step="0.1" value="1">
+                        <select class="form-select" id="foodUnit">
+                            <option value="serving">serving</option>
+                            <option value="g">grams</option>
+                            <option value="oz">oz</option>
+                            <option value="cup">cup</option>
+                            <option value="piece">piece</option>
+                            <option value="tbsp">tbsp</option>
+                            <option value="tsp">tsp</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary">Add</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Food Log Section -->
+            <section class="food-log-section">
+                <h2 class="section-title">Today's Food</h2>
+                <div class="food-log" id="foodLog">
+                    <p class="empty-state" id="emptyState">No food logged yet. Use voice or add manually!</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay" id="settingsModal" hidden>
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button class="close-btn" id="closeSettingsBtn" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="apiKey">OpenAI API Key</label>
+                        <input type="password" class="form-input" id="apiKey" placeholder="sk-...">
+                        <p class="form-hint">Your key is stored locally and never sent to any server except OpenAI.</p>
+                    </div>
+                    <div class="form-group">
+                        <label>Daily Macro Goals (grams)</label>
+                        <p class="form-hint">Set your macro goals - calories are calculated automatically (P×4 + C×4 + F×9)</p>
+                        <div class="macro-inputs">
+                            <div class="macro-input-group">
+                                <label for="proteinGoalInput">Protein</label>
+                                <input type="number" class="form-input" id="proteinGoalInput" placeholder="150" min="0" max="500">
+                            </div>
+                            <div class="macro-input-group">
+                                <label for="carbsGoalInput">Carbs</label>
+                                <input type="number" class="form-input" id="carbsGoalInput" placeholder="250" min="0" max="800">
+                            </div>
+                            <div class="macro-input-group">
+                                <label for="fatGoalInput">Fat</label>
+                                <input type="number" class="form-input" id="fatGoalInput" placeholder="65" min="0" max="300">
+                            </div>
+                        </div>
+                        <p class="calculated-calories">Calculated calories: <strong id="calculatedCalories">2000</strong> kcal</p>
+                    </div>
+                    <div class="form-group">
+                        <label>Data Management</label>
+                        <button class="btn btn-outline btn-danger" id="clearDataBtn">Clear All Data</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay" hidden>
+            <div class="loading-spinner"></div>
+            <p class="loading-text" id="loadingText">Analyzing...</p>
+        </div>
+
+        <!-- Toast Notification -->
+        <div class="toast" id="toast" hidden>
+            <span class="toast-message" id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
