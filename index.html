@@ -61,25 +61,58 @@
                     <span class="remaining-label">remaining</span>
                 </div>
                 
-                <!-- Daily Macro Summary -->
+                <!-- Daily Macro Summary with Progress Bars -->
                 <div class="macro-summary" id="macroSummary">
                     <div class="macro-item protein">
-                        <span class="macro-value" id="proteinConsumed">0</span>
-                        <span class="macro-label">Protein</span>
-                        <span class="macro-goal">/ <span id="proteinGoal">150</span>g</span>
+                        <div class="macro-header">
+                            <span class="macro-label">Protein</span>
+                            <span class="macro-values"><span class="macro-value" id="proteinConsumed">0</span> / <span id="proteinGoal">150</span>g</span>
+                        </div>
+                        <div class="macro-bar-container">
+                            <div class="macro-bar protein-bar" id="proteinBar" style="width: 0%"></div>
+                        </div>
                     </div>
                     <div class="macro-item carbs">
-                        <span class="macro-value" id="carbsConsumed">0</span>
-                        <span class="macro-label">Carbs</span>
-                        <span class="macro-goal">/ <span id="carbsGoal">250</span>g</span>
+                        <div class="macro-header">
+                            <span class="macro-label">Carbs</span>
+                            <span class="macro-values"><span class="macro-value" id="carbsConsumed">0</span> / <span id="carbsGoal">250</span>g</span>
+                        </div>
+                        <div class="macro-bar-container">
+                            <div class="macro-bar carbs-bar" id="carbsBar" style="width: 0%"></div>
+                        </div>
                     </div>
                     <div class="macro-item fat">
-                        <span class="macro-value" id="fatConsumed">0</span>
-                        <span class="macro-label">Fat</span>
-                        <span class="macro-goal">/ <span id="fatGoal">65</span>g</span>
+                        <div class="macro-header">
+                            <span class="macro-label">Fat</span>
+                            <span class="macro-values"><span class="macro-value" id="fatConsumed">0</span> / <span id="fatGoal">65</span>g</span>
+                        </div>
+                        <div class="macro-bar-container">
+                            <div class="macro-bar fat-bar" id="fatBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="macro-item fiber">
+                        <div class="macro-header">
+                            <span class="macro-label">Fiber</span>
+                            <span class="macro-values"><span class="macro-value" id="fiberConsumed">0</span> / <span id="fiberGoal">30</span>g</span>
+                        </div>
+                        <div class="macro-bar-container">
+                            <div class="macro-bar fiber-bar" id="fiberBar" style="width: 0%"></div>
+                        </div>
                     </div>
                 </div>
             </section>
+
+            <!-- Sticky Header (hidden by default, shown on scroll) -->
+            <div class="sticky-header" id="stickyHeader" hidden>
+                <div class="sticky-content">
+                    <span class="sticky-calories"><span id="stickyCalConsumed">0</span> / <span id="stickyCalGoal">2000</span> kcal</span>
+                    <div class="sticky-macros">
+                        <span class="sticky-macro protein">P:<span id="stickyProtein">0</span></span>
+                        <span class="sticky-macro carbs">C:<span id="stickyCarbs">0</span></span>
+                        <span class="sticky-macro fat">F:<span id="stickyFat">0</span></span>
+                    </div>
+                </div>
+            </div>
 
             <!-- Voice/Text Input Section -->
             <section class="voice-section">
