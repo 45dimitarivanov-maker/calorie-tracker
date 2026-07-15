@@ -1322,9 +1322,8 @@
 
     function tryZxingOnImage(img, url) {
         if (typeof ZXing === 'undefined') {
-            URL.revokeObjectURL(url);
-            hideLoading();
-            showToast('No barcode detected. Try again or enter manually.', 4000);
+            // Try OpenAI Vision as last resort
+            tryOpenAIVisionOnImage(url);
             return;
         }
         
@@ -1337,17 +1336,112 @@
                 debugLog('✓ ZXing photo scanned: ' + barcode);
                 onBarcodeScanned(barcode, result);
             }).catch(function(err) {
-                URL.revokeObjectURL(url);
-                hideLoading();
                 debugLog('ZXing photo error: ' + (err.message || err.name || 'not found'));
-                showToast('No barcode detected. Try a clearer photo or enter manually.', 4000);
+                debugLog('Falling back to OpenAI Vision...');
+                // Fall back to OpenAI Vision API
+                tryOpenAIVisionOnImage(url);
             });
         } catch (e) {
+            debugLog('ZXing exception: ' + e.message);
+            tryOpenAIVisionOnImage(url);
+        }
+    }
+
+    // OpenAI Vision fallback for barcode reading (~$0.0002 per scan)
+    function tryOpenAIVisionOnImage(url) {
+        var apiKey = getApiKey();
+        if (!apiKey) {
             URL.revokeObjectURL(url);
             hideLoading();
-            debugLog('ZXing exception: ' + e.message);
-            showToast('Error reading photo. Try manual entry.', 4000);
+            showToast('Add OpenAI API key in Settings to use AI barcode reading', 4000);
+            return;
         }
+        
+        debugLog('Using OpenAI Vision API to read barcode...');
+        showLoading('Reading barcode with AI...');
+        
+        // Fetch image as blob and convert to base64
+        fetch(url)
+            .then(function(res) { return res.blob(); })
+            .then(function(blob) {
+                return new Promise(function(resolve, reject) {
+                    var reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result); };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            })
+            .then(function(dataUrl) {
+                // Call OpenAI Vision API
+                return fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + apiKey
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: 'Read the barcode number from this image. Reply with ONLY the digits of the barcode number, no other text. If you cannot see a clear barcode, reply with "NONE".'
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: dataUrl,
+                                        detail: 'low'
+                                    }
+                                }
+                            ]
+                        }],
+                        max_tokens: 30,
+                        temperature: 0
+                    })
+                });
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    return response.text().then(function(text) {
+                        throw new Error('OpenAI API error: ' + response.status + ' - ' + text);
+                    });
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                URL.revokeObjectURL(url);
+                hideLoading();
+                
+                var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (!content) {
+                    debugLog('OpenAI returned no content');
+                    showToast('AI could not read barcode. Try again or enter manually.', 4000);
+                    return;
+                }
+                
+                var trimmed = content.trim();
+                debugLog('OpenAI response: "' + trimmed + '"');
+                
+                // Extract digits only from response
+                var digits = trimmed.replace(/\D/g, '');
+                
+                if (trimmed.toUpperCase().includes('NONE') || !digits || digits.length < 8) {
+                    debugLog('No valid barcode in response');
+                    showToast('AI could not read barcode. Try a clearer photo.', 4000);
+                    return;
+                }
+                
+                debugLog('✓ AI extracted barcode: ' + digits);
+                onBarcodeScanned(digits, null);
+            })
+            .catch(function(err) {
+                URL.revokeObjectURL(url);
+                hideLoading();
+                debugLog('OpenAI Vision error: ' + err.message);
+                showToast('AI barcode reading failed: ' + err.message.substring(0, 60), 4000);
+            });
     }
 
     function lookupBarcode(barcode) {
