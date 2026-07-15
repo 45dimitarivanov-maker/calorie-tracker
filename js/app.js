@@ -999,8 +999,8 @@
     var zxingControls = null;
 
     function initBarcodeScanner() {
-        // ZXing exposes ZXingBrowser global
-        if (typeof ZXingBrowser === 'undefined') {
+        // @zxing/library UMD exposes the ZXing global
+        if (typeof ZXing === 'undefined') {
             console.warn('ZXing library not loaded');
             return false;
         }
@@ -1055,25 +1055,25 @@
             // Restrict to common product barcode formats to reduce false positives
             var hints = new Map();
             var formats = [
-                ZXingBrowser.BarcodeFormat.EAN_13,
-                ZXingBrowser.BarcodeFormat.EAN_8,
-                ZXingBrowser.BarcodeFormat.UPC_A,
-                ZXingBrowser.BarcodeFormat.UPC_E,
-                ZXingBrowser.BarcodeFormat.CODE_128
+                ZXing.BarcodeFormat.EAN_13,
+                ZXing.BarcodeFormat.EAN_8,
+                ZXing.BarcodeFormat.UPC_A,
+                ZXing.BarcodeFormat.UPC_E,
+                ZXing.BarcodeFormat.CODE_128
             ];
-            hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
-            hints.set(ZXingBrowser.DecodeHintType.TRY_HARDER, true);
+            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
-            zxingReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+            zxingReader = new ZXing.BrowserMultiFormatReader(hints);
             debugLog('Reader created with format restrictions');
         } catch (e) {
             debugLog('ERROR creating reader: ' + e.message);
             // Fallback without hints
-            zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
+            zxingReader = new ZXing.BrowserMultiFormatReader();
         }
 
         // Get camera devices and prefer back camera
-        ZXingBrowser.BrowserCodeReader.listVideoInputDevices()
+        zxingReader.listVideoInputDevices()
             .then(function(devices) {
                 debugLog('Found ' + devices.length + ' camera(s)');
                 
@@ -1087,13 +1087,12 @@
                     debugLog('Using camera: ' + (backCamera ? 'back' : 'default'));
                 }
 
-                return zxingReader.decodeFromVideoDevice(
+                // decodeFromVideoDevice in @zxing/library returns a Promise<void>
+                // and continuously calls the callback as barcodes are found
+                zxingReader.decodeFromVideoDevice(
                     selectedDeviceId,
                     'barcodeVideo',
-                    function(result, err, controls) {
-                        if (controls && !zxingControls) {
-                            zxingControls = controls;
-                        }
+                    function(result, err) {
                         if (result) {
                             var barcode = result.getText();
                             var format = result.getBarcodeFormat();
@@ -1104,11 +1103,7 @@
                         // Ignore errors - they fire constantly when no barcode found
                     }
                 );
-            })
-            .then(function(controls) {
-                if (controls) {
-                    zxingControls = controls;
-                }
+                
                 state.isScannerActive = true;
                 debugLog('Camera initialized!');
                 debugLog('Scanner running - point at barcode');
@@ -1132,17 +1127,14 @@
 
     function stopBarcodeScanner() {
         try {
-            if (zxingControls) {
-                zxingControls.stop();
-                zxingControls = null;
-                debugLog('Scanner stopped (controls)');
-            }
             if (zxingReader) {
                 if (typeof zxingReader.reset === 'function') {
                     zxingReader.reset();
+                    debugLog('Scanner stopped');
                 }
                 zxingReader = null;
             }
+            zxingControls = null;
         } catch (err) {
             console.error('Error stopping scanner:', err);
         }
