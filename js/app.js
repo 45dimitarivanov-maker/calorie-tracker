@@ -646,12 +646,19 @@
             return;
         }
         
-        voiceRecognition.recognition = new SpeechRecognition();
-        voiceRecognition.recognition.continuous = false;
-        voiceRecognition.recognition.interimResults = true;
-        // Use Bulgarian language for better recognition
-        voiceRecognition.recognition.lang = 'bg-BG';
-        voiceRecognition.recognition.maxAlternatives = 1;
+        try {
+            voiceRecognition.recognition = new SpeechRecognition();
+            voiceRecognition.recognition.continuous = false;
+            voiceRecognition.recognition.interimResults = true;
+            // Default to English - more compatible across platforms
+            voiceRecognition.recognition.lang = 'en-US';
+            voiceRecognition.recognition.maxAlternatives = 1;
+            console.log('Speech recognition initialized successfully');
+        } catch (e) {
+            console.error('Error initializing speech recognition:', e);
+            voiceRecognition.recognition = null;
+            return;
+        }
         
         voiceRecognition.recognition.onstart = function() {
             voiceRecognition.isListening = true;
@@ -712,12 +719,24 @@
     }
 
     function startVoice() {
-        if (!voiceRecognition.recognition || voiceRecognition.isListening) return false;
+        if (!voiceRecognition.recognition) {
+            console.error('Recognition not initialized');
+            showToast('Voice not initialized. Refresh the page.', 4000);
+            return false;
+        }
+        if (voiceRecognition.isListening) {
+            console.log('Already listening');
+            return false;
+        }
         try {
+            console.log('Starting speech recognition...');
+            console.log('Language:', voiceRecognition.recognition.lang);
             voiceRecognition.recognition.start();
+            console.log('Start command sent');
             return true;
         } catch (error) {
             console.error('Error starting recognition:', error);
+            showToast('Voice error: ' + error.message, 4000);
             return false;
         }
     }
