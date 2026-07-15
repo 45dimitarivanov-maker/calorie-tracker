@@ -921,6 +921,8 @@
         ).then(function() {
             state.isScannerActive = true;
             debugLog('Camera started successfully!');
+            debugLog('TIP: Hold 15-20cm from barcode');
+            debugLog('Barcode must fit inside scan box');
             showToast('Camera ready - point at barcode', 3000);
         }).catch(function(err) {
             state.isScannerActive = false;
