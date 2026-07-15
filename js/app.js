@@ -959,12 +959,47 @@
             showToast('Camera ready - point at barcode', 3000);
         });
 
-        // Detection callback
+        // Detection with confidence filtering and multiple reads
+        var lastDetectedCodes = [];
+        var detectionThreshold = 3; // Need 3 consistent reads
+        
         Quagga.onDetected(function(result) {
-            if (result && result.codeResult && result.codeResult.code) {
-                var code = result.codeResult.code;
-                debugLog('BARCODE FOUND: ' + code);
+            if (!result || !result.codeResult || !result.codeResult.code) return;
+            
+            var code = result.codeResult.code;
+            var errors = result.codeResult.decodedCodes;
+            
+            // Calculate average error (lower is better)
+            var avgError = 0;
+            if (errors && errors.length > 0) {
+                var errorSum = errors.reduce(function(sum, item) {
+                    return sum + (item.error || 0);
+                }, 0);
+                avgError = errorSum / errors.length;
+            }
+            
+            debugLog('Detected: ' + code + ' (err: ' + avgError.toFixed(3) + ')');
+            
+            // Filter out low confidence reads (error > 0.1)
+            if (avgError > 0.1) {
+                debugLog('Skipped - low confidence');
+                return;
+            }
+            
+            // Add to recent detections
+            lastDetectedCodes.push(code);
+            if (lastDetectedCodes.length > 5) {
+                lastDetectedCodes.shift();
+            }
+            
+            // Check if we have consistent reads
+            var codeCount = lastDetectedCodes.filter(function(c) { return c === code; }).length;
+            debugLog('Consistent reads: ' + codeCount + '/' + detectionThreshold);
+            
+            if (codeCount >= detectionThreshold) {
+                debugLog('CONFIRMED BARCODE: ' + code);
                 debugLog('Format: ' + result.codeResult.format);
+                lastDetectedCodes = []; // Reset
                 onBarcodeScanned(code, result);
             }
         });
