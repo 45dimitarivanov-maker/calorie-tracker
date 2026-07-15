@@ -1051,25 +1051,13 @@
         debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
 
+        // Create reader with DEFAULT settings - no hints (they can prevent detection)
         try {
-            // Restrict to common product barcode formats to reduce false positives
-            var hints = new Map();
-            var formats = [
-                ZXing.BarcodeFormat.EAN_13,
-                ZXing.BarcodeFormat.EAN_8,
-                ZXing.BarcodeFormat.UPC_A,
-                ZXing.BarcodeFormat.UPC_E,
-                ZXing.BarcodeFormat.CODE_128
-            ];
-            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-            zxingReader = new ZXing.BrowserMultiFormatReader(hints);
-            debugLog('Reader created with format restrictions');
+            zxingReader = new ZXing.BrowserMultiFormatReader();
+            debugLog('Reader created (default settings)');
         } catch (e) {
             debugLog('ERROR creating reader: ' + e.message);
-            // Fallback without hints
-            zxingReader = new ZXing.BrowserMultiFormatReader();
+            return;
         }
 
         // Get camera devices and prefer back camera
@@ -1087,26 +1075,52 @@
                     debugLog('Using camera: ' + (backCamera ? 'back' : 'default'));
                 }
 
-                // decodeFromVideoDevice in @zxing/library returns a Promise<void>
-                // and continuously calls the callback as barcodes are found
+                var frameCount = 0;
+                var errorCount = 0;
+                var loggedErrors = {};
+                var lastStatusTime = Date.now();
+
+                // decodeFromVideoDevice continuously calls the callback
                 zxingReader.decodeFromVideoDevice(
                     selectedDeviceId,
                     'barcodeVideo',
                     function(result, err) {
+                        frameCount++;
+                        
+                        // Log status every ~3 seconds
+                        var now = Date.now();
+                        if (now - lastStatusTime > 3000) {
+                            debugLog('Scanning... frames: ' + frameCount + ', decoder errors: ' + errorCount);
+                            lastStatusTime = now;
+                        }
+                        
                         if (result) {
                             var barcode = result.getText();
                             var format = result.getBarcodeFormat();
                             debugLog('✓ SCANNED: ' + barcode);
                             debugLog('Format: ' + format);
                             onBarcodeScanned(barcode, result);
+                            return;
                         }
-                        // Ignore errors - they fire constantly when no barcode found
+                        
+                        if (err) {
+                            var errName = err.name || (err.constructor && err.constructor.name) || 'Error';
+                            // NotFoundException is normal - no barcode in this frame
+                            if (errName !== 'NotFoundException' && errName !== 'NotFoundException2') {
+                                errorCount++;
+                                // Log unique errors only (limit spam)
+                                if (!loggedErrors[errName]) {
+                                    loggedErrors[errName] = true;
+                                    debugLog('Decoder err: ' + errName + ' - ' + (err.message || 'no msg'));
+                                }
+                            }
+                        }
                     }
                 );
                 
                 state.isScannerActive = true;
                 debugLog('Camera initialized!');
-                debugLog('Scanner running - point at barcode');
+                debugLog('Scanning started - point at barcode');
                 showToast('Camera ready - point at barcode', 3000);
             })
             .catch(function(err) {
