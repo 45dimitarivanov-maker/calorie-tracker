@@ -160,21 +160,11 @@
                 
                 <!-- Barcode Scanner (AI-powered) -->
                 <div class="scan-input-container" id="scanInputContainer" hidden>
-                    <p class="scan-hint">📷 Take a clear photo of the barcode<br>AI will read it for you (~$0.0002 per scan)</p>
+                    <p class="scan-hint">📷 Take a clear photo of the barcode</p>
                     
-                    <label for="barcodePhotoInput" class="btn btn-primary" style="display: block; text-align: center; margin: 16px 0; padding: 16px; font-size: 16px; cursor: pointer;">
-                        📷 Take Photo of Barcode
-                    </label>
+                    <label for="barcodePhotoInput" class="btn btn-primary" style="display: block; text-align: center; margin: 16px 0; padding: 16px; font-size: 16px; cursor: pointer;">📷 Take Photo of Barcode</label>
                     <input type="file" id="barcodePhotoInput" accept="image/*" capture="environment" style="display: none;">
                     
-                    <div id="scannerDebug" style="background: #1e1e1e; color: #0f0; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 8px; margin: 8px 0; max-height: 120px; overflow-y: auto; text-align: left;">Debug log will appear here...</div>
-                    
-                    <p style="text-align: center; margin: 12px 0; color: #666; font-size: 14px;">— OR —</p>
-                    
-                    <div style="display: flex; gap: 8px;">
-                        <input type="text" id="manualBarcodeInput" class="form-input" placeholder="Enter barcode manually" pattern="\d+" style="flex: 1;">
-                        <button class="btn btn-primary" id="submitBarcodeBtn">Go</button>
-                    </div>
                     <button class="btn btn-outline" id="stopScanBtn" style="margin-top: 8px; width: 100%;">Cancel</button>
                 </div>
                 

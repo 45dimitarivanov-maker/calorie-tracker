@@ -995,23 +995,13 @@
     // BARCODE SCANNER MODULE (OpenAI Vision API)
     // ==========================================
 
-    // Debug logging function that shows on page
+    // Debug logging to console only
     function debugLog(message) {
         console.log('[Scanner]', message);
-        var debugPanel = document.getElementById('scannerDebug');
-        if (debugPanel) {
-            var time = new Date().toLocaleTimeString();
-            debugPanel.innerHTML = '<strong>' + time + '</strong>: ' + message + '<br>' + debugPanel.innerHTML;
-            var lines = debugPanel.innerHTML.split('<br>');
-            if (lines.length > 10) {
-                debugPanel.innerHTML = lines.slice(0, 10).join('<br>');
-            }
-        }
     }
 
     // No-op: scanner is now photo-based only, no live camera
     function startBarcodeScanner() {
-        debugLog('Ready - tap "Take Photo of Barcode"');
         state.isScannerActive = false;
     }
 
@@ -1604,30 +1594,6 @@
             stopScanBtn.addEventListener('click', function() {
                 stopBarcodeScanner();
                 setInputMode('voice');
-            });
-        }
-        
-        // Manual barcode entry
-        var submitBarcodeBtn = document.getElementById('submitBarcodeBtn');
-        var manualBarcodeInput = document.getElementById('manualBarcodeInput');
-        if (submitBarcodeBtn && manualBarcodeInput) {
-            var handleManualBarcode = function() {
-                var barcode = manualBarcodeInput.value.trim();
-                if (!/^\d{8,13}$/.test(barcode)) {
-                    showToast('Please enter a valid 8-13 digit barcode', 3000);
-                    return;
-                }
-                debugLog('Manual entry: ' + barcode);
-                stopBarcodeScanner();
-                manualBarcodeInput.value = '';
-                onBarcodeScanned(barcode, null);
-            };
-            submitBarcodeBtn.addEventListener('click', handleManualBarcode);
-            manualBarcodeInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleManualBarcode();
-                }
             });
         }
         
