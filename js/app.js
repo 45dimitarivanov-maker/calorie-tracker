@@ -646,17 +646,27 @@
             return;
         }
         
+        // Store the SpeechRecognition constructor for later use
+        voiceRecognition.SpeechRecognition = SpeechRecognition;
+        voiceRecognition.currentLang = 'en-US';
+        
+        createRecognitionInstance('en-US');
+    }
+
+    function createRecognitionInstance(lang) {
+        var SpeechRecognition = voiceRecognition.SpeechRecognition;
+        if (!SpeechRecognition) return;
+        
         try {
             voiceRecognition.recognition = new SpeechRecognition();
             voiceRecognition.recognition.continuous = false;
             voiceRecognition.recognition.interimResults = true;
-            // Default to English for better iOS compatibility - user can switch to Bulgarian after
-            voiceRecognition.recognition.lang = 'en-US';
-            voiceRecognition.recognition.maxAlternatives = 1;
-            console.log('Speech recognition initialized with language: en-US');
+            voiceRecognition.recognition.lang = lang;
+            voiceRecognition.recognition.maxAlternatives = 3;
+            voiceRecognition.currentLang = lang;
+            console.log('Recognition created with lang:', lang);
         } catch (e) {
-            console.error('Error initializing speech recognition:', e);
-            voiceRecognition.recognition = null;
+            console.error('Error creating recognition:', e);
             return;
         }
         
@@ -1543,16 +1553,19 @@
     }
 
     function setVoiceLanguage(lang) {
-        if (!voiceRecognition.recognition) return;
+        if (!voiceRecognition.SpeechRecognition) return;
         
         // Stop any active recognition before changing language
-        if (voiceRecognition.isListening) {
-            voiceRecognition.recognition.stop();
+        if (voiceRecognition.isListening && voiceRecognition.recognition) {
+            try {
+                voiceRecognition.recognition.stop();
+            } catch (e) {}
         }
         
-        // Set the language
-        voiceRecognition.recognition.lang = lang;
-        console.log('Voice language set to:', lang);
+        // Create a NEW recognition instance with the new language
+        // This is critical for iOS Safari - it doesn't respect lang changes on existing instances
+        createRecognitionInstance(lang);
+        console.log('Voice language changed to:', lang);
         
         // Update UI
         var langBG = document.getElementById('langBG');
