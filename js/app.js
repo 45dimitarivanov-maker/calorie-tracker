@@ -834,13 +834,13 @@
     };
 
     // ==========================================
-    // BARCODE SCANNER MODULE
+    // BARCODE SCANNER MODULE (QuaggaJS)
     // ==========================================
 
     function initBarcodeScanner() {
-        // Check if Html5Qrcode is available
-        if (typeof Html5Qrcode === 'undefined') {
-            console.warn('Html5Qrcode library not loaded');
+        // Check if Quagga is available
+        if (typeof Quagga === 'undefined') {
+            console.warn('QuaggaJS library not loaded');
             return false;
         }
         return true;
@@ -862,14 +862,14 @@
     }
 
     function startBarcodeScanner() {
-        debugLog('Starting scanner...');
+        debugLog('Starting QuaggaJS scanner...');
         
         if (!initBarcodeScanner()) {
-            debugLog('ERROR: Html5Qrcode library not loaded');
+            debugLog('ERROR: QuaggaJS library not loaded');
             showToast('Barcode scanner not available', 3000);
             return;
         }
-        debugLog('Library loaded OK');
+        debugLog('QuaggaJS loaded OK');
 
         var readerElement = document.getElementById('barcodeReader');
         if (!readerElement) {
@@ -879,104 +879,97 @@
         debugLog('Reader element found');
 
         // Stop existing scanner first
-        if (state.barcodeScanner) {
-            try {
-                state.barcodeScanner.stop().catch(function() {});
-                debugLog('Previous scanner stopped');
-            } catch (e) {
-                debugLog('No previous scanner');
-            }
+        if (state.isScannerActive) {
+            Quagga.stop();
+            debugLog('Previous scanner stopped');
         }
-
-        state.barcodeScanner = new Html5Qrcode('barcodeReader');
-        debugLog('Scanner instance created');
-        
-        // Larger scanning box for better detection
-        var config = {
-            fps: 10,
-            qrbox: { width: 250, height: 100 },
-            formatsToSupport: [
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.CODE_128
-            ]
-        };
 
         debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
 
-        state.barcodeScanner.start(
-            { facingMode: 'environment' },
-            config,
-            function(decodedText, decodedResult) {
-                // Success callback
-                debugLog('BARCODE FOUND: ' + decodedText);
-                onBarcodeScanned(decodedText, decodedResult);
+        Quagga.init({
+            inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: readerElement,
+                constraints: {
+                    width: { min: 640 },
+                    height: { min: 480 },
+                    facingMode: "environment"
+                }
             },
-            function(errorMessage) {
-                // Silent - this fires constantly
+            locator: {
+                patchSize: "medium",
+                halfSample: true
+            },
+            numOfWorkers: navigator.hardwareConcurrency || 4,
+            frequency: 10,
+            decoder: {
+                readers: [
+                    "ean_reader",
+                    "ean_8_reader",
+                    "upc_reader",
+                    "upc_e_reader",
+                    "code_128_reader"
+                ]
+            },
+            locate: true
+        }, function(err) {
+            if (err) {
+                debugLog('ERROR: ' + err.message);
+                var errStr = err.toString();
+                
+                if (errStr.includes('NotAllowed') || errStr.includes('Permission')) {
+                    showToast('Camera access denied. Check browser permissions.', 5000);
+                } else if (errStr.includes('NotFound')) {
+                    showToast('No camera found.', 4000);
+                } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
+                    showToast('Camera busy - close other apps using it.', 4000);
+                } else {
+                    showToast('Camera error: ' + err.message.substring(0, 50), 4000);
+                }
+                return;
             }
-        ).then(function() {
-            state.isScannerActive = true;
-            debugLog('Camera started successfully!');
-            debugLog('TIP: Hold 15-20cm from barcode');
-            debugLog('Barcode must fit inside scan box');
-            showToast('Camera ready - point at barcode', 3000);
-        }).catch(function(err) {
-            state.isScannerActive = false;
-            var errStr = err.toString();
-            debugLog('ERROR: ' + errStr);
             
-            if (errStr.includes('NotAllowedError')) {
-                showToast('Camera access denied. Check browser permissions.', 5000);
-            } else if (errStr.includes('NotFoundError')) {
-                showToast('No camera found.', 4000);
-            } else if (errStr.includes('NotReadableError')) {
-                showToast('Camera busy - close other apps using it.', 4000);
-            } else if (errStr.includes('OverconstrainedError')) {
-                // Try without facingMode constraint
-                debugLog('Trying without facingMode...');
-                tryAlternativeCamera();
-            } else {
-                showToast('Camera error: ' + errStr.substring(0, 50), 4000);
+            debugLog('Camera initialized!');
+            Quagga.start();
+            state.isScannerActive = true;
+            debugLog('Scanner running - point at barcode');
+            debugLog('TIP: Hold steady, good lighting');
+            showToast('Camera ready - point at barcode', 3000);
+        });
+
+        // Detection callback
+        Quagga.onDetected(function(result) {
+            if (result && result.codeResult && result.codeResult.code) {
+                var code = result.codeResult.code;
+                debugLog('BARCODE FOUND: ' + code);
+                debugLog('Format: ' + result.codeResult.format);
+                onBarcodeScanned(code, result);
             }
         });
-    }
 
-    // Fallback for devices where facingMode doesn't work
-    function tryAlternativeCamera() {
-        debugLog('Attempting alternative camera start...');
-        
-        state.barcodeScanner.start(
-            true, // Use default camera
-            {
-                fps: 10,
-                qrbox: { width: 250, height: 100 }
-            },
-            function(decodedText) {
-                debugLog('BARCODE FOUND: ' + decodedText);
-                onBarcodeScanned(decodedText);
-            },
-            function() {}
-        ).then(function() {
-            state.isScannerActive = true;
-            debugLog('Alternative camera started!');
-            showToast('Camera ready', 3000);
-        }).catch(function(err) {
-            debugLog('Alternative also failed: ' + err);
-            showToast('Could not start camera: ' + err.toString().substring(0, 40), 5000);
+        // Processing callback (shows scanning is active)
+        var processCount = 0;
+        Quagga.onProcessed(function(result) {
+            processCount++;
+            if (processCount % 30 === 0) { // Log every ~3 seconds
+                debugLog('Scanning... (frames: ' + processCount + ')');
+            }
         });
     }
 
     function stopBarcodeScanner() {
-        if (state.barcodeScanner && state.isScannerActive) {
-            state.barcodeScanner.stop().then(function() {
+        if (state.isScannerActive) {
+            try {
+                Quagga.stop();
+                Quagga.offDetected();
+                Quagga.offProcessed();
                 state.isScannerActive = false;
-            }).catch(function(err) {
+                debugLog('Scanner stopped');
+            } catch (err) {
                 console.error('Error stopping scanner:', err);
-            });
+            }
         }
     }
 
