@@ -650,10 +650,10 @@
             voiceRecognition.recognition = new SpeechRecognition();
             voiceRecognition.recognition.continuous = false;
             voiceRecognition.recognition.interimResults = true;
-            // Default to Bulgarian - user preference
-            voiceRecognition.recognition.lang = 'bg-BG';
+            // Default to English for better iOS compatibility - user can switch to Bulgarian after
+            voiceRecognition.recognition.lang = 'en-US';
             voiceRecognition.recognition.maxAlternatives = 1;
-            console.log('Speech recognition initialized with language: bg-BG');
+            console.log('Speech recognition initialized with language: en-US');
         } catch (e) {
             console.error('Error initializing speech recognition:', e);
             voiceRecognition.recognition = null;
