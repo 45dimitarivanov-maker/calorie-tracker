@@ -846,79 +846,125 @@
         return true;
     }
 
+    // Debug logging function that shows on page
+    function debugLog(message) {
+        console.log('[Scanner]', message);
+        var debugPanel = document.getElementById('scannerDebug');
+        if (debugPanel) {
+            var time = new Date().toLocaleTimeString();
+            debugPanel.innerHTML = '<strong>' + time + '</strong>: ' + message + '<br>' + debugPanel.innerHTML;
+            // Keep only last 10 messages
+            var lines = debugPanel.innerHTML.split('<br>');
+            if (lines.length > 10) {
+                debugPanel.innerHTML = lines.slice(0, 10).join('<br>');
+            }
+        }
+    }
+
     function startBarcodeScanner() {
+        debugLog('Starting scanner...');
+        
         if (!initBarcodeScanner()) {
+            debugLog('ERROR: Html5Qrcode library not loaded');
             showToast('Barcode scanner not available', 3000);
             return;
         }
+        debugLog('Library loaded OK');
 
         var readerElement = document.getElementById('barcodeReader');
         if (!readerElement) {
-            console.error('Barcode reader element not found');
+            debugLog('ERROR: Reader element not found');
             return;
         }
+        debugLog('Reader element found');
 
         // Stop existing scanner first
         if (state.barcodeScanner) {
             try {
                 state.barcodeScanner.stop().catch(function() {});
+                debugLog('Previous scanner stopped');
             } catch (e) {
-                console.log('Scanner was not running');
+                debugLog('No previous scanner');
             }
         }
 
         state.barcodeScanner = new Html5Qrcode('barcodeReader');
+        debugLog('Scanner instance created');
         
         // Larger scanning box for better detection
         var config = {
-            fps: 15,
-            qrbox: { width: 280, height: 150 },
-            aspectRatio: 1.5,
+            fps: 10,
+            qrbox: { width: 250, height: 100 },
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.EAN_13,
                 Html5QrcodeSupportedFormats.EAN_8,
                 Html5QrcodeSupportedFormats.UPC_A,
                 Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.CODE_39
+                Html5QrcodeSupportedFormats.CODE_128
             ]
         };
 
+        debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
-        console.log('Starting barcode scanner with config:', config);
 
         state.barcodeScanner.start(
             { facingMode: 'environment' },
             config,
             function(decodedText, decodedResult) {
                 // Success callback
-                console.log('Barcode detected:', decodedText, decodedResult);
+                debugLog('BARCODE FOUND: ' + decodedText);
                 onBarcodeScanned(decodedText, decodedResult);
             },
             function(errorMessage) {
-                // This fires constantly when no barcode is detected - that's normal
-                // Only log occasionally to avoid console spam
-                if (Math.random() < 0.01) {
-                    console.log('Scanning...', errorMessage);
-                }
+                // Silent - this fires constantly
             }
         ).then(function() {
             state.isScannerActive = true;
+            debugLog('Camera started successfully!');
             showToast('Camera ready - point at barcode', 3000);
-            console.log('Scanner started successfully');
         }).catch(function(err) {
-            console.error('Error starting scanner:', err);
             state.isScannerActive = false;
+            var errStr = err.toString();
+            debugLog('ERROR: ' + errStr);
             
-            if (err.toString().includes('NotAllowedError')) {
-                showToast('Camera access denied. Please allow camera in browser settings.', 5000);
-            } else if (err.toString().includes('NotFoundError')) {
-                showToast('No camera found on this device.', 4000);
-            } else if (err.toString().includes('NotReadableError')) {
-                showToast('Camera is in use by another app.', 4000);
+            if (errStr.includes('NotAllowedError')) {
+                showToast('Camera access denied. Check browser permissions.', 5000);
+            } else if (errStr.includes('NotFoundError')) {
+                showToast('No camera found.', 4000);
+            } else if (errStr.includes('NotReadableError')) {
+                showToast('Camera busy - close other apps using it.', 4000);
+            } else if (errStr.includes('OverconstrainedError')) {
+                // Try without facingMode constraint
+                debugLog('Trying without facingMode...');
+                tryAlternativeCamera();
             } else {
-                showToast('Camera error: ' + err.toString().substring(0, 50), 4000);
+                showToast('Camera error: ' + errStr.substring(0, 50), 4000);
             }
+        });
+    }
+
+    // Fallback for devices where facingMode doesn't work
+    function tryAlternativeCamera() {
+        debugLog('Attempting alternative camera start...');
+        
+        state.barcodeScanner.start(
+            true, // Use default camera
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 100 }
+            },
+            function(decodedText) {
+                debugLog('BARCODE FOUND: ' + decodedText);
+                onBarcodeScanned(decodedText);
+            },
+            function() {}
+        ).then(function() {
+            state.isScannerActive = true;
+            debugLog('Alternative camera started!');
+            showToast('Camera ready', 3000);
+        }).catch(function(err) {
+            debugLog('Alternative also failed: ' + err);
+            showToast('Could not start camera: ' + err.toString().substring(0, 40), 5000);
         });
     }
 
