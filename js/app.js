@@ -14,7 +14,8 @@
         FOOD_ENTRIES: 'calorieTracker_foodEntries',
         SETTINGS: 'calorieTracker_settings',
         API_KEY: 'calorieTracker_apiKey',
-        RECENT_FOODS: 'calorieTracker_recentFoods'
+        RECENT_FOODS: 'calorieTracker_recentFoods',
+        WEIGHT_ENTRIES: 'calorieTracker_weightEntries'
     };
 
     const DEFAULT_SETTINGS = {
@@ -168,11 +169,81 @@
             localStorage.removeItem(STORAGE_KEYS.FOOD_ENTRIES);
             localStorage.removeItem(STORAGE_KEYS.SETTINGS);
             localStorage.removeItem(STORAGE_KEYS.API_KEY);
+            localStorage.removeItem(STORAGE_KEYS.WEIGHT_ENTRIES);
+            localStorage.removeItem(STORAGE_KEYS.RECENT_FOODS);
             return true;
         } catch (error) {
             console.error('Error clearing data:', error);
             return false;
         }
+    }
+
+    // ==========================================
+    // WEIGHT STORAGE HELPERS
+    // ==========================================
+
+    function getAllWeightEntries() {
+        try {
+            var data = localStorage.getItem(STORAGE_KEYS.WEIGHT_ENTRIES);
+            return data ? JSON.parse(data) : {};
+        } catch (error) {
+            console.error('Error reading weight entries:', error);
+            return {};
+        }
+    }
+
+    function getWeightForDate(dateKey) {
+        var all = getAllWeightEntries();
+        return typeof all[dateKey] === 'number' ? all[dateKey] : null;
+    }
+
+    function saveWeight(dateKey, kg) {
+        var all = getAllWeightEntries();
+        all[dateKey] = kg;
+        try {
+            localStorage.setItem(STORAGE_KEYS.WEIGHT_ENTRIES, JSON.stringify(all));
+            return true;
+        } catch (error) {
+            console.error('Error saving weight:', error);
+            return false;
+        }
+    }
+
+    // Get the most recent weight up to and including a date. Returns { dateKey, kg } or null.
+    function getLatestWeight(uptoDateKey) {
+        var all = getAllWeightEntries();
+        var keys = Object.keys(all).sort(); // ascending
+        var latest = null;
+        for (var i = 0; i < keys.length; i++) {
+            if (!uptoDateKey || keys[i] <= uptoDateKey) {
+                latest = { dateKey: keys[i], kg: all[keys[i]] };
+            } else {
+                break;
+            }
+        }
+        return latest;
+    }
+
+    // Get weight entries for a specific year+month. Returns { day: kg } (day is 1..31).
+    function getWeightsForMonth(year, monthIdx) {
+        var all = getAllWeightEntries();
+        var result = {};
+        Object.keys(all).forEach(function(dateKey) {
+            var d = new Date(dateKey + 'T12:00:00');
+            if (d.getFullYear() === year && d.getMonth() === monthIdx) {
+                result[d.getDate()] = all[dateKey];
+            }
+        });
+        return result;
+    }
+
+    // Get last N days of weight (in chronological order). Returns array of { dateKey, kg }.
+    function getRecentWeights(days) {
+        days = days || 7;
+        var all = getAllWeightEntries();
+        var keys = Object.keys(all).sort();
+        var recent = keys.slice(-days);
+        return recent.map(function(k) { return { dateKey: k, kg: all[k] }; });
     }
 
     // ==========================================
@@ -988,8 +1059,355 @@
         selectedDate: getTodayKey(),
         recentFoods: [],
         barcodeScanner: null,
-        isScannerActive: false
+        isScannerActive: false,
+        weightGraphMonth: null, // Date object representing the first day of the viewed month
+        currentView: 'food' // 'food' or 'weight'
     };
+
+    // ==========================================
+    // VIEW SWITCHING (top tabs)
+    // ==========================================
+    function switchView(name) {
+        if (name !== 'food' && name !== 'weight') return;
+        state.currentView = name;
+
+        var foodView = document.getElementById('viewFood');
+        var weightView = document.getElementById('viewWeight');
+        var tabFood = document.getElementById('tabFood');
+        var tabWeight = document.getElementById('tabWeight');
+
+        if (foodView) foodView.hidden = (name !== 'food');
+        if (weightView) weightView.hidden = (name !== 'weight');
+        if (tabFood) {
+            tabFood.classList.toggle('active', name === 'food');
+            tabFood.setAttribute('aria-selected', name === 'food' ? 'true' : 'false');
+        }
+        if (tabWeight) {
+            tabWeight.classList.toggle('active', name === 'weight');
+            tabWeight.setAttribute('aria-selected', name === 'weight' ? 'true' : 'false');
+        }
+
+        // When switching to weight, re-render to pick up any state changes
+        if (name === 'weight') {
+            refreshWeightUI();
+        }
+
+        try { history.replaceState(null, '', '#' + name); } catch (e) {}
+    }
+
+    // ==========================================
+    // WEIGHT UI RENDERING
+    // ==========================================
+
+    function renderWeightCard() {
+        var currentEl = document.getElementById('weightCurrentValue');
+        var deltaEl = document.getElementById('weightDelta');
+        var inputEl = document.getElementById('weightInput');
+        var dateLabelEl = document.getElementById('weightForDate');
+        if (!currentEl) return;
+
+        // Weight is per selected date (follows the header date-nav)
+        var dateKey = state.selectedDate;
+        var weightForDate = getWeightForDate(dateKey);
+
+        // Update the "Weight for X" label
+        if (dateLabelEl) {
+            dateLabelEl.textContent = formatDateKey(dateKey);
+        }
+
+        // Display value: weight for the selected date if logged, else em-dash
+        if (weightForDate !== null) {
+            currentEl.textContent = weightForDate.toFixed(1);
+        } else {
+            currentEl.textContent = '—';
+        }
+
+        // Pre-fill input for the currently selected date whenever it changes
+        if (inputEl) {
+            var lastPrefilledFor = inputEl.dataset.prefilledFor || '';
+            if (lastPrefilledFor !== dateKey) {
+                inputEl.value = weightForDate !== null ? weightForDate.toFixed(1) : '';
+                inputEl.dataset.prefilledFor = dateKey;
+            }
+        }
+
+        // Delta: compare selected-date weight to the most recent entry strictly BEFORE this date
+        if (deltaEl) {
+            var allKeys = Object.keys(getAllWeightEntries()).sort();
+            var earlierKeys = allKeys.filter(function(k) { return k < dateKey; });
+            if (weightForDate !== null && earlierKeys.length > 0) {
+                var prevKey = earlierKeys[earlierKeys.length - 1];
+                var prevKg = getAllWeightEntries()[prevKey];
+                var diff = weightForDate - prevKg;
+                var sign = diff > 0 ? '+' : (diff < 0 ? '−' : '');
+                var abs = Math.abs(diff).toFixed(1);
+                deltaEl.textContent = sign + abs + ' kg';
+                deltaEl.classList.remove('up', 'down');
+                if (diff < -0.05) deltaEl.classList.add('down');
+                else if (diff > 0.05) deltaEl.classList.add('up');
+                deltaEl.hidden = false;
+            } else {
+                deltaEl.hidden = true;
+            }
+        }
+
+        renderSparkline();
+    }
+
+    function renderSparkline() {
+        var svg = document.getElementById('weightSparkline');
+        if (!svg) return;
+        svg.innerHTML = '';
+
+        var recent = getRecentWeights(14); // up to 14 days
+        var W = 300, H = 40, PAD = 4;
+
+        if (recent.length < 2) {
+            // Not enough data
+            var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', W / 2);
+            text.setAttribute('y', H / 2);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central');
+            text.setAttribute('class', 'weight-sparkline-empty');
+            text.textContent = recent.length === 1 ? 'Log more days to see trend' : 'No weight logged yet';
+            svg.appendChild(text);
+            return;
+        }
+
+        var values = recent.map(function(r) { return r.kg; });
+        var minV = Math.min.apply(null, values);
+        var maxV = Math.max.apply(null, values);
+        var range = maxV - minV;
+        if (range < 0.1) range = 0.1; // avoid divide-by-zero when flat
+
+        var innerW = W - PAD * 2;
+        var innerH = H - PAD * 2;
+
+        var points = recent.map(function(r, i) {
+            var x = PAD + (i / (recent.length - 1)) * innerW;
+            var y = PAD + innerH - ((r.kg - minV) / range) * innerH;
+            return { x: x, y: y };
+        });
+
+        // Line path
+        var d = points.map(function(p, i) {
+            return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ' ' + p.y.toFixed(1);
+        }).join(' ');
+
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'weight-sparkline-line');
+        svg.appendChild(path);
+
+        // Dots
+        points.forEach(function(p, i) {
+            var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', p.x.toFixed(1));
+            circle.setAttribute('cy', p.y.toFixed(1));
+            circle.setAttribute('r', i === points.length - 1 ? '3' : '2');
+            circle.setAttribute('class', 'weight-sparkline-dot' + (i === points.length - 1 ? ' last' : ''));
+            svg.appendChild(circle);
+        });
+    }
+
+    function renderWeightGraph() {
+        var svg = document.getElementById('weightGraph');
+        var titleEl = document.getElementById('weightGraphTitle');
+        var emptyEl = document.getElementById('weightGraphEmpty');
+        var statsEl = document.getElementById('weightStats');
+        var nextBtn = document.getElementById('nextMonthBtn');
+        if (!svg || !titleEl) return;
+
+        // Ensure viewed month is set
+        if (!state.weightGraphMonth) {
+            var today = new Date();
+            state.weightGraphMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        }
+
+        var year = state.weightGraphMonth.getFullYear();
+        var monthIdx = state.weightGraphMonth.getMonth();
+        var monthName = state.weightGraphMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        titleEl.textContent = monthName;
+
+        // Disable "next" if already at current month
+        var now = new Date();
+        var isCurrentOrFuture = (year > now.getFullYear()) ||
+            (year === now.getFullYear() && monthIdx >= now.getMonth());
+        if (nextBtn) {
+            nextBtn.disabled = isCurrentOrFuture;
+            nextBtn.style.opacity = isCurrentOrFuture ? '0.3' : '1';
+        }
+
+        var daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+        var weights = getWeightsForMonth(year, monthIdx); // { day: kg }
+        var dayNums = Object.keys(weights).map(Number).sort(function(a, b) { return a - b; });
+
+        // Clear
+        svg.innerHTML = '';
+
+        if (dayNums.length === 0) {
+            if (emptyEl) emptyEl.hidden = false;
+            if (statsEl) statsEl.hidden = true;
+            return;
+        }
+        if (emptyEl) emptyEl.hidden = true;
+
+        // Graph dimensions (viewBox is 320x180)
+        var W = 320, H = 180;
+        var PAD_L = 34, PAD_R = 10, PAD_T = 12, PAD_B = 22;
+        var innerW = W - PAD_L - PAD_R;
+        var innerH = H - PAD_T - PAD_B;
+
+        // Compute y-axis range with 0.5kg padding
+        var values = dayNums.map(function(d) { return weights[d]; });
+        var minV = Math.min.apply(null, values);
+        var maxV = Math.max.apply(null, values);
+        if (maxV - minV < 1) { // ensure at least 1kg range for readability
+            var mid = (minV + maxV) / 2;
+            minV = mid - 0.5;
+            maxV = mid + 0.5;
+        } else {
+            minV -= 0.3;
+            maxV += 0.3;
+        }
+        var yRange = maxV - minV;
+
+        // Helper: x for day-of-month
+        function xForDay(day) {
+            return PAD_L + ((day - 1) / (daysInMonth - 1 || 1)) * innerW;
+        }
+        // Helper: y for weight value
+        function yForVal(v) {
+            return PAD_T + innerH - ((v - minV) / yRange) * innerH;
+        }
+
+        var svgNS = 'http://www.w3.org/2000/svg';
+
+        // Y-axis gridlines + labels (3 lines: min, mid, max)
+        [0, 0.5, 1].forEach(function(frac) {
+            var v = minV + frac * yRange;
+            var y = yForVal(v);
+            var line = document.createElementNS(svgNS, 'line');
+            line.setAttribute('x1', PAD_L);
+            line.setAttribute('y1', y);
+            line.setAttribute('x2', W - PAD_R);
+            line.setAttribute('y2', y);
+            line.setAttribute('class', 'weight-graph-gridline');
+            svg.appendChild(line);
+
+            var label = document.createElementNS(svgNS, 'text');
+            label.setAttribute('x', PAD_L - 4);
+            label.setAttribute('y', y + 3);
+            label.setAttribute('text-anchor', 'end');
+            label.setAttribute('class', 'weight-graph-axis-label');
+            label.textContent = v.toFixed(1);
+            svg.appendChild(label);
+        });
+
+        // X-axis labels (day numbers) - show 1, 10, 20, and last day
+        var xTicks = [1, 10, 20, daysInMonth];
+        xTicks.forEach(function(day) {
+            if (day > daysInMonth) return;
+            var x = xForDay(day);
+            var label = document.createElementNS(svgNS, 'text');
+            label.setAttribute('x', x);
+            label.setAttribute('y', H - 6);
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('class', 'weight-graph-axis-label');
+            label.textContent = day;
+            svg.appendChild(label);
+        });
+
+        // Line path connecting dots (only through logged days, in order)
+        var pathD = dayNums.map(function(d, i) {
+            return (i === 0 ? 'M' : 'L') + xForDay(d).toFixed(1) + ' ' + yForVal(weights[d]).toFixed(1);
+        }).join(' ');
+        var path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('class', 'weight-graph-line');
+        svg.appendChild(path);
+
+        // Dots
+        var todayKey = getTodayKey();
+        var todayDate = new Date(todayKey + 'T12:00:00');
+        var isViewingCurrentMonth = (year === todayDate.getFullYear() && monthIdx === todayDate.getMonth());
+        dayNums.forEach(function(day) {
+            var circle = document.createElementNS(svgNS, 'circle');
+            circle.setAttribute('cx', xForDay(day).toFixed(1));
+            circle.setAttribute('cy', yForVal(weights[day]).toFixed(1));
+            circle.setAttribute('r', '4');
+            var isToday = isViewingCurrentMonth && day === todayDate.getDate();
+            circle.setAttribute('class', 'weight-graph-dot' + (isToday ? ' today' : ''));
+            var titleNode = document.createElementNS(svgNS, 'title');
+            titleNode.textContent = 'Day ' + day + ': ' + weights[day].toFixed(1) + ' kg';
+            circle.appendChild(titleNode);
+            svg.appendChild(circle);
+        });
+
+        // Stats
+        if (statsEl) {
+            statsEl.hidden = false;
+            document.getElementById('weightMin').textContent = Math.min.apply(null, values).toFixed(1);
+            document.getElementById('weightMax').textContent = Math.max.apply(null, values).toFixed(1);
+            var avg = values.reduce(function(s, v) { return s + v; }, 0) / values.length;
+            document.getElementById('weightAvg').textContent = avg.toFixed(1);
+
+            // Change = last - first (chronologically)
+            var first = weights[dayNums[0]];
+            var last = weights[dayNums[dayNums.length - 1]];
+            var change = last - first;
+            var changeEl = document.getElementById('weightChange');
+            var sign = change > 0 ? '+' : (change < 0 ? '−' : '');
+            changeEl.textContent = sign + Math.abs(change).toFixed(1) + ' kg';
+            changeEl.classList.remove('up', 'down');
+            if (change < -0.05) changeEl.classList.add('down');
+            else if (change > 0.05) changeEl.classList.add('up');
+        }
+    }
+
+    function refreshWeightUI() {
+        renderWeightCard();
+        renderWeightGraph();
+    }
+
+    function handleWeightSubmit(e) {
+        e.preventDefault();
+        var inputEl = document.getElementById('weightInput');
+        if (!inputEl) return;
+        var kg = parseFloat(inputEl.value);
+        if (isNaN(kg) || kg < 20 || kg > 300) {
+            showToast('Please enter a valid weight (20-300 kg)', 3000);
+            return;
+        }
+        // Round to 1 decimal
+        kg = Math.round(kg * 10) / 10;
+        // Save for the currently selected date (from the header date-nav)
+        var dateKey = state.selectedDate;
+        var ok = saveWeight(dateKey, kg);
+        if (ok) {
+            inputEl.dataset.prefilledFor = ''; // force re-prefill next render
+            refreshWeightUI();
+            showToast('Logged ' + kg.toFixed(1) + ' kg for ' + formatDateKey(dateKey), 2000);
+        } else {
+            showToast('Failed to save weight', 3000);
+        }
+    }
+
+    function changeWeightGraphMonth(offset) {
+        if (!state.weightGraphMonth) {
+            var t = new Date();
+            state.weightGraphMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+        }
+        var newMonth = new Date(state.weightGraphMonth);
+        newMonth.setMonth(newMonth.getMonth() + offset);
+        // Don't allow future months
+        var now = new Date();
+        var currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        if (newMonth > currentMonthStart) return;
+        state.weightGraphMonth = newMonth;
+        renderWeightGraph();
+    }
 
     // ==========================================
     // BARCODE SCANNER MODULE (OpenAI Vision API)
@@ -1259,6 +1677,8 @@
         renderFoodLog(entries, handleDeleteEntry);
         updateProgressRing(totalCalories, state.settings.dailyGoal);
         updateMacroSummary(totalMacros, state.settings);
+        // Weight card follows selectedDate — refresh whenever date changes
+        renderWeightCard();
     }
 
     // ==========================================
@@ -1382,6 +1802,7 @@
         updateDateNavigationUI();
         refreshDataForDate(state.selectedDate);
         renderQuickAddChips();
+        refreshWeightUI();
         
         loadSettingsIntoForm(state.settings, getApiKey());
         
@@ -1390,6 +1811,14 @@
         
         initVoice();
         setupVoiceRecognition();
+
+        // Restore last view from URL hash (#food or #weight), default to food
+        var initialView = 'food';
+        if (typeof window !== 'undefined' && window.location && window.location.hash) {
+            var h = window.location.hash.replace('#', '');
+            if (h === 'weight' || h === 'food') initialView = h;
+        }
+        switchView(initialView);
         
         if (!getApiKey()) {
             setTimeout(function() {
@@ -1675,6 +2104,28 @@
                 goToToday();
             });
         }
+
+        // Weight input form
+        var weightInputForm = document.getElementById('weightInputForm');
+        if (weightInputForm) {
+            weightInputForm.addEventListener('submit', handleWeightSubmit);
+        }
+
+        // Weight graph month navigation
+        var prevMonthBtn = document.getElementById('prevMonthBtn');
+        var nextMonthBtn = document.getElementById('nextMonthBtn');
+        if (prevMonthBtn) {
+            prevMonthBtn.addEventListener('click', function() { changeWeightGraphMonth(-1); });
+        }
+        if (nextMonthBtn) {
+            nextMonthBtn.addEventListener('click', function() { changeWeightGraphMonth(1); });
+        }
+
+        // View tabs (Food / Weight)
+        var tabFood = document.getElementById('tabFood');
+        var tabWeight = document.getElementById('tabWeight');
+        if (tabFood) tabFood.addEventListener('click', function() { switchView('food'); });
+        if (tabWeight) tabWeight.addEventListener('click', function() { switchView('weight'); });
     }
 
     function setVoiceLanguage(lang) {
@@ -2015,8 +2466,10 @@
         if (success) {
             state.settings = getSettings();
             state.proposedEntries = [];
+            state.weightGraphMonth = null;
             
             refreshData();
+            refreshWeightUI();
             renderProposedEntries([], getProposedEntryHandlers());
             loadSettingsIntoForm(state.settings, '');
             toggleSettingsModal(false);

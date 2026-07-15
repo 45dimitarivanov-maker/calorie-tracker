@@ -1,55 +1,55 @@
 # Active Context
 
-## Current Session Summary (July 14, 2026)
+## Current Focus
+Reorganized UI with top tabs to separate Food and Weight tracking into distinct views. Weight per-day bug fixed.
 
-### Session Progress
+## Recent Changes (July 15, 2026)
 
-Successfully implemented Phase 1 & 2 of UX improvements based on user feedback.
+### 1. Top-tab navigation (Food / Weight)
+- Added `<nav class="view-tabs">` right below the header
+- Two tabs: **🍽️ Food** (default) and **⚖️ Weight**
+- Only one view is visible at a time (`.view[hidden]` → `display: none`)
+- Selected view is reflected in URL hash (`#food` or `#weight`) so refresh preserves state
+- Tabs sync with `aria-selected` for accessibility
 
-### Features Implemented This Session
+### 2. Per-day weight (bug fix)
+- Weight now follows `state.selectedDate` — the same date the header date-nav controls for food
+- `handleWeightSubmit` saves weight for the currently selected date, not always for "today"
+- `renderWeightCard` displays the weight for the selected date (dash if not logged)
+- Weight card header shows "Weight for [Today / Yesterday / Mon, Jul 14]"
+- Input pre-fills with that day's weight (empty if no data), refreshes when date changes
+- Delta compares selected-date weight vs. the most recent entry **strictly before** that date
+- `refreshDataForDate(dateKey)` now also calls `renderWeightCard()` so switching days updates both views
 
-#### Phase 1 - Core UX (✅ Complete)
-- [x] **Macro Progress Bars** - Visual horizontal bars under each macro
-- [x] **Fiber Tracking** - Added as 4th macro with AI prompt update
-- [x] **Improved Macro Text Contrast** - Better readability
+### 3. Weight view layout
+- Weight view contains only the weight card + monthly graph
+- Larger weight display (2.25rem) and bigger graph (240px) since it has full width now
+- Full-width Log button
 
-#### Phase 2 - Advanced Features (✅ Partial)
-- [x] **Sticky Compact Header** - Shows calories/macros when scrolling
-- [x] **Colored Meal Borders** - CSS styles ready for meal grouping
-- [x] **Floating Action Button (FAB)** - CSS ready
-- [ ] **Meal Grouping** - CSS done, JS implementation needed
-- [ ] **Timestamps on Food Entries** - Data structure supports it
-- [ ] **Tap-to-Edit Food Cards** - Edit modal exists, needs connection
+### 4. UX polish
+- Desktop breakpoint (>= 900px): container widens to 720px for the weight view — nothing squished
+- Removed the previous "left column / right column" 2-col grid experiment; simpler single-column-per-view design
+- Sticky-header (scroll pill) still lives in the food view only
 
-### Files Modified This Session
-1. `index.html` - Added sticky header HTML, macro bars HTML
-2. `css/styles.css` - Macro bars, sticky header, meal grouping, FAB styles
-3. `js/app.js` - Updated AI prompt for fiber, getTotalMacros with fiber, updateMacroSummary with progress bars, setupStickyHeader
+### Files Modified
+- `calorie-tracker/index.html` — Added `<nav class="view-tabs">` and wrapped content into `.view.view-food` and `.view.view-weight` containers. Weight card + graph moved into the weight view. Weight card gained a "Weight for X" label.
+- `calorie-tracker/css/styles.css` — Added `.view-tabs`, `.view-tab`, `.view[hidden]`, `.view-weight` styling. Removed the old 2-col desktop grid.
+- `calorie-tracker/js/app.js`:
+  - Added `state.currentView` and `switchView(name)` function with URL-hash sync
+  - `renderWeightCard` now reads `state.selectedDate` and shows date-specific weight + label
+  - `handleWeightSubmit` saves for `state.selectedDate` (not `getTodayKey()`)
+  - `refreshDataForDate` calls `renderWeightCard()` after food refresh
+  - Tab click listeners in `setupEventListeners`
+  - `init()` restores view from URL hash
 
-### Current State
-- App is fully functional with all existing features
-- New macro progress bars visible
-- Fiber tracking active (AI will extract fiber from food)
-- Sticky header appears when scrolling past progress section
-- Barcode scanning works
-- Quick add / recent foods works
-- Date navigation works
+## Next Steps
+- Consider allowing edit/delete of a logged weight from the graph (click a dot)
+- Persist "last opened view" between sessions (localStorage) instead of just URL hash
+- Consider a "days logged" count in the weight stats row
+- Not pushed to GitHub — user will review first
 
-### Known Issues
-- None currently
-
-### Git Commits This Session
-1. `85dd847` - Add macro progress bars, sticky header, fiber tracking, meal grouping CSS
-2. `95ac014` - Add fiber tracking, macro progress bars, sticky header, and improved AI prompt
-
----
-
-## Previous Session Features
-- Voice input (Bulgarian/English)
-- Text input for AI analysis
-- Barcode scanning with Open Food Facts
-- Date navigation
-- Quick add / recent foods
-- Manual entry
-- Settings with macro goals
-- Progress ring visualization
+## Known Limitations
+- kg only (no lbs toggle)
+- No goal-weight line on the graph
+- Sparkline needs ≥ 2 logged days
+- Weight input replaces any previous value for that day (no "history of weigh-ins per day")

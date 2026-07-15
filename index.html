@@ -40,8 +40,29 @@
             </div>
         </header>
 
+        <!-- View Tabs -->
+        <nav class="view-tabs" role="tablist">
+            <button class="view-tab active" id="tabFood" data-view="food" role="tab" aria-selected="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path>
+                    <path d="M7 2v20"></path>
+                    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"></path>
+                </svg>
+                Food
+            </button>
+            <button class="view-tab" id="tabWeight" data-view="weight" role="tab" aria-selected="false">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 7v5l3 2"></path>
+                </svg>
+                Weight
+            </button>
+        </nav>
+
         <!-- Main Content -->
         <main class="main-content">
+            <!-- ==================== FOOD VIEW ==================== -->
+            <div class="view view-food" id="viewFood">
             <!-- Calorie Progress Section -->
             <section class="progress-section">
                 <div class="progress-ring-container">
@@ -266,6 +287,66 @@
                     <p class="empty-state" id="emptyState">No food logged yet. Use voice or add manually!</p>
                 </div>
             </section>
+            </div><!-- /view-food -->
+
+            <!-- ==================== WEIGHT VIEW ==================== -->
+            <div class="view view-weight" id="viewWeight" hidden>
+                <!-- Weight Tracking Card -->
+                <section class="weight-card">
+                    <div class="weight-header">
+                        <h3 class="weight-title">Weight for <span id="weightForDate">today</span></h3>
+                        <div class="weight-current">
+                            <span class="weight-current-value" id="weightCurrentValue">—</span>
+                            <span class="weight-current-unit">kg</span>
+                            <span class="weight-delta" id="weightDelta" hidden></span>
+                        </div>
+                    </div>
+                    <svg class="weight-sparkline" id="weightSparkline" width="100%" height="50" preserveAspectRatio="none" viewBox="0 0 300 50"></svg>
+                    <form class="weight-input-form" id="weightInputForm">
+                        <input type="number" class="weight-input" id="weightInput" placeholder="Log weight (kg)" step="0.1" min="20" max="300">
+                        <button type="submit" class="btn btn-primary">Log</button>
+                    </form>
+                </section>
+
+                <!-- Weight Monthly Graph -->
+                <section class="weight-graph-section">
+                    <div class="weight-graph-header">
+                        <button class="date-nav-btn" id="prevMonthBtn" aria-label="Previous month">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <span class="weight-graph-title" id="weightGraphTitle">July 2026</span>
+                        <button class="date-nav-btn" id="nextMonthBtn" aria-label="Next month">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="weight-graph-container">
+                        <svg class="weight-graph" id="weightGraph" width="100%" height="240" preserveAspectRatio="none" viewBox="0 0 320 240"></svg>
+                        <p class="weight-graph-empty" id="weightGraphEmpty">No weight data for this month</p>
+                    </div>
+                    <div class="weight-stats" id="weightStats" hidden>
+                        <div class="weight-stat">
+                            <span class="weight-stat-label">Min</span>
+                            <span class="weight-stat-value" id="weightMin">—</span>
+                        </div>
+                        <div class="weight-stat">
+                            <span class="weight-stat-label">Max</span>
+                            <span class="weight-stat-value" id="weightMax">—</span>
+                        </div>
+                        <div class="weight-stat">
+                            <span class="weight-stat-label">Avg</span>
+                            <span class="weight-stat-value" id="weightAvg">—</span>
+                        </div>
+                        <div class="weight-stat">
+                            <span class="weight-stat-label">Change</span>
+                            <span class="weight-stat-value" id="weightChange">—</span>
+                        </div>
+                    </div>
+                </section>
+            </div><!-- /view-weight -->
         </main>
 
         <!-- Settings Modal -->
