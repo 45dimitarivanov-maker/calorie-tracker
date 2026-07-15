@@ -650,10 +650,10 @@
             voiceRecognition.recognition = new SpeechRecognition();
             voiceRecognition.recognition.continuous = false;
             voiceRecognition.recognition.interimResults = true;
-            // Default to English - more compatible across platforms
-            voiceRecognition.recognition.lang = 'en-US';
+            // Default to Bulgarian - user preference
+            voiceRecognition.recognition.lang = 'bg-BG';
             voiceRecognition.recognition.maxAlternatives = 1;
-            console.log('Speech recognition initialized successfully');
+            console.log('Speech recognition initialized with language: bg-BG');
         } catch (e) {
             console.error('Error initializing speech recognition:', e);
             voiceRecognition.recognition = null;
