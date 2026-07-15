@@ -1561,7 +1561,14 @@
     function setVoiceLanguage(lang) {
         if (!voiceRecognition.recognition) return;
         
+        // Stop any active recognition before changing language
+        if (voiceRecognition.isListening) {
+            voiceRecognition.recognition.stop();
+        }
+        
+        // Set the language
         voiceRecognition.recognition.lang = lang;
+        console.log('Voice language set to:', lang);
         
         // Update UI
         var langBG = document.getElementById('langBG');
@@ -1571,14 +1578,14 @@
         if (lang === 'bg-BG') {
             langBG.classList.add('active');
             langEN.classList.remove('active');
-            if (voiceHint) voiceHint.textContent = 'Кажи какво яде';
+            if (voiceHint) voiceHint.textContent = 'Кажи какво яде (🇧🇬)';
         } else {
             langBG.classList.remove('active');
             langEN.classList.add('active');
-            if (voiceHint) voiceHint.textContent = 'Tap to speak what you ate';
+            if (voiceHint) voiceHint.textContent = 'Tap to speak (🇬🇧)';
         }
         
-        showToast('Voice language: ' + (lang === 'bg-BG' ? 'Български' : 'English'), 2000);
+        showToast('Language: ' + (lang === 'bg-BG' ? 'Български 🇧🇬' : 'English 🇬🇧'), 2000);
     }
 
     function setInputMode(mode) {
