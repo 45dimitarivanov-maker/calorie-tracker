@@ -729,6 +729,15 @@
     }
 
     function startVoice() {
+        // Use Whisper API when on iOS Safari with Bulgarian, or when explicitly requested
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        var useWhisper = isIOS && voiceRecognition.currentLang === 'bg-BG';
+        
+        if (useWhisper) {
+            console.log('Using Whisper API for Bulgarian on iOS');
+            return startWhisperRecording();
+        }
+        
         if (!voiceRecognition.recognition) {
             console.error('Recognition not initialized');
             showToast('Voice not initialized. Refresh the page.', 4000);
@@ -752,9 +761,128 @@
     }
 
     function stopVoice() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            return;
+        }
         if (voiceRecognition.recognition && voiceRecognition.isListening) {
             voiceRecognition.recognition.stop();
         }
+    }
+
+    // ==========================================
+    // WHISPER API MODULE (For iOS Bulgarian support)
+    // ==========================================
+    
+    var mediaRecorder = null;
+    var audioChunks = [];
+    var audioStream = null;
+
+    function startWhisperRecording() {
+        if (!getApiKey()) {
+            showToast('Please add your OpenAI API key in Settings first', 4000);
+            return false;
+        }
+        
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('Audio recording not supported on this browser', 4000);
+            return false;
+        }
+        
+        audioChunks = [];
+        
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(function(stream) {
+                audioStream = stream;
+                
+                // Try different MIME types for iOS compatibility
+                var mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = 'audio/mp4';
+                }
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = ''; // Let browser choose
+                }
+                
+                var options = mimeType ? { mimeType: mimeType } : {};
+                mediaRecorder = new MediaRecorder(stream, options);
+                
+                mediaRecorder.ondataavailable = function(e) {
+                    if (e.data.size > 0) {
+                        audioChunks.push(e.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = function() {
+                    // Stop all audio tracks
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(function(track) { track.stop(); });
+                    }
+                    
+                    // Combine chunks and send to Whisper
+                    var audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                    transcribeWithWhisper(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                voiceRecognition.isListening = true;
+                if (voiceRecognition.onStart) voiceRecognition.onStart();
+                console.log('Whisper recording started, mimeType:', mediaRecorder.mimeType);
+            })
+            .catch(function(err) {
+                console.error('Error accessing microphone:', err);
+                showToast('Microphone access denied', 4000);
+                if (voiceRecognition.onError) voiceRecognition.onError('Microphone access denied');
+            });
+        
+        return true;
+    }
+
+    function transcribeWithWhisper(audioBlob) {
+        voiceRecognition.isListening = false;
+        if (voiceRecognition.onEnd) voiceRecognition.onEnd();
+        
+        showLoading(true, 'Transcribing Bulgarian speech...');
+        
+        var apiKey = getApiKey();
+        var formData = new FormData();
+        formData.append('file', audioBlob, 'audio.webm');
+        formData.append('model', 'whisper-1');
+        formData.append('language', 'bg'); // Bulgarian ISO code
+        formData.append('response_format', 'json');
+        
+        fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + apiKey
+            },
+            body: formData
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.text().then(function(text) {
+                    throw new Error('Whisper API error: ' + response.status + ' - ' + text);
+                });
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            hideLoading();
+            var transcript = data.text || '';
+            console.log('Whisper transcript:', transcript);
+            
+            if (transcript && voiceRecognition.onResult) {
+                voiceRecognition.onResult(transcript);
+            } else {
+                showToast('No speech detected. Please try again.', 3000);
+            }
+        })
+        .catch(function(error) {
+            hideLoading();
+            console.error('Whisper API error:', error);
+            showToast('Voice transcription failed: ' + error.message, 4000);
+            if (voiceRecognition.onError) voiceRecognition.onError(error.message);
+        });
     }
 
     // ==========================================
