@@ -992,19 +992,28 @@
     };
 
     // ==========================================
-    // BARCODE SCANNER MODULE (ZXing Browser)
+    // BARCODE SCANNER MODULE (Native BarcodeDetector API + ZXing fallback)
     // ==========================================
 
     var zxingReader = null;
     var zxingControls = null;
+    var barcodeDetector = null;
+    var scannerVideoStream = null;
+    var scannerAnimationFrame = null;
 
     function initBarcodeScanner() {
-        // @zxing/library UMD exposes the ZXing global
-        if (typeof ZXing === 'undefined') {
-            console.warn('ZXing library not loaded');
-            return false;
+        // Check if native BarcodeDetector API is available (preferred)
+        if ('BarcodeDetector' in window) {
+            console.log('Native BarcodeDetector API available');
+            return 'native';
         }
-        return true;
+        // Fallback: ZXing library
+        if (typeof ZXing !== 'undefined') {
+            console.log('Using ZXing fallback');
+            return 'zxing';
+        }
+        console.warn('No barcode scanner available');
+        return false;
     }
 
     // Debug logging function that shows on page
@@ -1023,14 +1032,14 @@
     }
 
     function startBarcodeScanner() {
-        debugLog('Starting ZXing scanner...');
+        debugLog('Starting barcode scanner...');
         
-        if (!initBarcodeScanner()) {
-            debugLog('ERROR: ZXing library not loaded');
+        var scannerType = initBarcodeScanner();
+        if (!scannerType) {
+            debugLog('ERROR: No scanner library available');
             showToast('Barcode scanner not available', 3000);
             return;
         }
-        debugLog('ZXing loaded OK');
 
         var videoElement = document.getElementById('barcodeVideo');
         if (!videoElement) {
@@ -1044,14 +1053,111 @@
             stopBarcodeScanner();
         }
 
-        startScannerInternal();
+        if (scannerType === 'native') {
+            debugLog('Using Native BarcodeDetector API');
+            startNativeScannerInternal();
+        } else {
+            debugLog('Using ZXing library');
+            startZxingScannerInternal();
+        }
     }
 
-    function startScannerInternal() {
+    // NATIVE BARCODE DETECTOR API (preferred - much faster and more reliable)
+    function startNativeScannerInternal() {
         debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
 
-        // Create reader with DEFAULT settings - no hints (they can prevent detection)
+        try {
+            // Create BarcodeDetector with common product formats
+            barcodeDetector = new BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
+            });
+            debugLog('BarcodeDetector created');
+        } catch (e) {
+            debugLog('BarcodeDetector error: ' + e.message + ' - trying without formats');
+            try {
+                barcodeDetector = new BarcodeDetector();
+            } catch (e2) {
+                debugLog('Failed to create detector: ' + e2.message);
+                return;
+            }
+        }
+
+        var videoElement = document.getElementById('barcodeVideo');
+        var constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
+            .then(function(stream) {
+                scannerVideoStream = stream;
+                videoElement.srcObject = stream;
+                videoElement.setAttribute('playsinline', 'true');
+                return videoElement.play();
+            })
+            .then(function() {
+                state.isScannerActive = true;
+                debugLog('Camera started - scanning...');
+                showToast('Camera ready - point at barcode', 3000);
+                
+                var frameCount = 0;
+                var lastStatusTime = Date.now();
+
+                function scanFrame() {
+                    if (!state.isScannerActive || !barcodeDetector || !videoElement.videoWidth) {
+                        if (state.isScannerActive) {
+                            scannerAnimationFrame = requestAnimationFrame(scanFrame);
+                        }
+                        return;
+                    }
+                    
+                    frameCount++;
+                    
+                    // Log status every ~3 seconds
+                    var now = Date.now();
+                    if (now - lastStatusTime > 3000) {
+                        debugLog('Scanning... frames: ' + frameCount);
+                        lastStatusTime = now;
+                    }
+
+                    barcodeDetector.detect(videoElement)
+                        .then(function(barcodes) {
+                            if (barcodes && barcodes.length > 0) {
+                                var barcode = barcodes[0];
+                                debugLog('✓ SCANNED: ' + barcode.rawValue);
+                                debugLog('Format: ' + barcode.format);
+                                onBarcodeScanned(barcode.rawValue, barcode);
+                                return;
+                            }
+                            if (state.isScannerActive) {
+                                scannerAnimationFrame = requestAnimationFrame(scanFrame);
+                            }
+                        })
+                        .catch(function(err) {
+                            console.error('Detection error:', err);
+                            if (state.isScannerActive) {
+                                scannerAnimationFrame = requestAnimationFrame(scanFrame);
+                            }
+                        });
+                }
+                
+                scanFrame();
+            })
+            .catch(function(err) {
+                debugLog('Camera error: ' + err.message);
+                handleCameraError(err);
+            });
+    }
+
+    // ZXING FALLBACK
+    function startZxingScannerInternal() {
+        debugLog('Requesting camera access...');
+        showToast('Starting camera...', 2000);
+
         try {
             zxingReader = new ZXing.BrowserMultiFormatReader();
             debugLog('Reader created (default settings)');
@@ -1060,14 +1166,12 @@
             return;
         }
 
-        // Get camera devices and prefer back camera
         zxingReader.listVideoInputDevices()
             .then(function(devices) {
                 debugLog('Found ' + devices.length + ' camera(s)');
                 
                 var selectedDeviceId = undefined;
                 if (devices.length > 0) {
-                    // Try to find back/environment camera
                     var backCamera = devices.find(function(d) {
                         return /back|rear|environment/i.test(d.label);
                     });
@@ -1076,83 +1180,80 @@
                 }
 
                 var frameCount = 0;
-                var errorCount = 0;
-                var loggedErrors = {};
                 var lastStatusTime = Date.now();
 
-                // decodeFromVideoDevice continuously calls the callback
                 zxingReader.decodeFromVideoDevice(
                     selectedDeviceId,
                     'barcodeVideo',
                     function(result, err) {
                         frameCount++;
-                        
-                        // Log status every ~3 seconds
                         var now = Date.now();
                         if (now - lastStatusTime > 3000) {
-                            debugLog('Scanning... frames: ' + frameCount + ', decoder errors: ' + errorCount);
+                            debugLog('Scanning... frames: ' + frameCount);
                             lastStatusTime = now;
                         }
-                        
                         if (result) {
-                            var barcode = result.getText();
-                            var format = result.getBarcodeFormat();
-                            debugLog('✓ SCANNED: ' + barcode);
-                            debugLog('Format: ' + format);
-                            onBarcodeScanned(barcode, result);
-                            return;
-                        }
-                        
-                        if (err) {
-                            var errName = err.name || (err.constructor && err.constructor.name) || 'Error';
-                            // NotFoundException is normal - no barcode in this frame
-                            if (errName !== 'NotFoundException' && errName !== 'NotFoundException2') {
-                                errorCount++;
-                                // Log unique errors only (limit spam)
-                                if (!loggedErrors[errName]) {
-                                    loggedErrors[errName] = true;
-                                    debugLog('Decoder err: ' + errName + ' - ' + (err.message || 'no msg'));
-                                }
-                            }
+                            debugLog('✓ SCANNED: ' + result.getText());
+                            onBarcodeScanned(result.getText(), result);
                         }
                     }
                 );
                 
                 state.isScannerActive = true;
                 debugLog('Camera initialized!');
-                debugLog('Scanning started - point at barcode');
                 showToast('Camera ready - point at barcode', 3000);
             })
             .catch(function(err) {
                 debugLog('ERROR: ' + err.message);
-                var errStr = String(err.message || err);
-                
-                if (errStr.includes('NotAllowed') || errStr.includes('Permission') || errStr.includes('denied')) {
-                    showToast('Camera access denied. Check browser permissions.', 5000);
-                } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
-                    showToast('No camera found.', 4000);
-                } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
-                    showToast('Camera busy - close other apps using it.', 4000);
-                } else {
-                    showToast('Camera error: ' + errStr.substring(0, 60), 4000);
-                }
+                handleCameraError(err);
             });
+    }
+
+    function handleCameraError(err) {
+        var errStr = String(err.message || err);
+        if (errStr.includes('NotAllowed') || errStr.includes('Permission') || errStr.includes('denied')) {
+            showToast('Camera access denied. Check browser permissions.', 5000);
+        } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
+            showToast('No camera found.', 4000);
+        } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
+            showToast('Camera busy - close other apps using it.', 4000);
+        } else {
+            showToast('Camera error: ' + errStr.substring(0, 60), 4000);
+        }
     }
 
     function stopBarcodeScanner() {
         try {
+            state.isScannerActive = false;
+            
+            // Cancel animation frame (native scanner)
+            if (scannerAnimationFrame) {
+                cancelAnimationFrame(scannerAnimationFrame);
+                scannerAnimationFrame = null;
+            }
+            
+            // Stop camera stream (native scanner)
+            if (scannerVideoStream) {
+                scannerVideoStream.getTracks().forEach(function(track) { track.stop(); });
+                scannerVideoStream = null;
+                var videoElement = document.getElementById('barcodeVideo');
+                if (videoElement) videoElement.srcObject = null;
+            }
+            
+            // Stop ZXing reader
             if (zxingReader) {
                 if (typeof zxingReader.reset === 'function') {
                     zxingReader.reset();
-                    debugLog('Scanner stopped');
                 }
                 zxingReader = null;
             }
             zxingControls = null;
+            barcodeDetector = null;
+            
+            debugLog('Scanner stopped');
         } catch (err) {
             console.error('Error stopping scanner:', err);
         }
-        state.isScannerActive = false;
     }
 
     function onBarcodeScanned(barcode, result) {
