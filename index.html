@@ -165,8 +165,15 @@
                     <div class="scanner-wrapper">
                         <video id="barcodeVideo" class="barcode-reader" playsinline></video>
                     </div>
-                    <p class="scan-hint">Point camera at a barcode</p>
+                    <p class="scan-hint">Point camera at a barcode (or use photo below)</p>
                     <div id="scannerDebug" style="background: #1e1e1e; color: #0f0; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 8px; margin: 8px 0; max-height: 120px; overflow-y: auto; text-align: left;">Debug log will appear here...</div>
+                    
+                    <!-- Take photo option (best for iOS) -->
+                    <label for="barcodePhotoInput" class="btn btn-primary" style="display: block; text-align: center; margin: 8px 0; cursor: pointer;">
+                        📷 Take Photo of Barcode
+                    </label>
+                    <input type="file" id="barcodePhotoInput" accept="image/*" capture="environment" style="display: none;">
+                    
                     <div style="display: flex; gap: 8px; margin-top: 8px;">
                         <input type="text" id="manualBarcodeInput" class="form-input" placeholder="Or enter barcode manually" pattern="\d+" style="flex: 1;">
                         <button class="btn btn-primary" id="submitBarcodeBtn">Go</button>

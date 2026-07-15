@@ -1265,6 +1265,91 @@
         lookupBarcode(barcode);
     }
 
+    // Decode barcode from a photo file (works great on iOS)
+    function handleBarcodePhoto(file) {
+        debugLog('Photo captured: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)');
+        showLoading('Reading barcode from photo...');
+        
+        stopBarcodeScanner();
+        
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        
+        img.onload = function() {
+            debugLog('Image loaded: ' + img.width + 'x' + img.height);
+            
+            // Try Native BarcodeDetector first
+            if ('BarcodeDetector' in window) {
+                debugLog('Using Native BarcodeDetector on photo');
+                var detector;
+                try {
+                    detector = new BarcodeDetector({
+                        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
+                    });
+                } catch (e) {
+                    detector = new BarcodeDetector();
+                }
+                
+                detector.detect(img).then(function(barcodes) {
+                    if (barcodes && barcodes.length > 0) {
+                        URL.revokeObjectURL(url);
+                        hideLoading();
+                        var b = barcodes[0];
+                        debugLog('✓ Photo scanned: ' + b.rawValue);
+                        onBarcodeScanned(b.rawValue, b);
+                    } else {
+                        debugLog('Native: no barcode. Trying ZXing...');
+                        tryZxingOnImage(img, url);
+                    }
+                }).catch(function(err) {
+                    debugLog('Native detector error: ' + (err.message || err));
+                    tryZxingOnImage(img, url);
+                });
+            } else {
+                tryZxingOnImage(img, url);
+            }
+        };
+        
+        img.onerror = function() {
+            URL.revokeObjectURL(url);
+            hideLoading();
+            debugLog('Failed to load image');
+            showToast('Failed to load photo', 3000);
+        };
+        
+        img.src = url;
+    }
+
+    function tryZxingOnImage(img, url) {
+        if (typeof ZXing === 'undefined') {
+            URL.revokeObjectURL(url);
+            hideLoading();
+            showToast('No barcode detected. Try again or enter manually.', 4000);
+            return;
+        }
+        
+        try {
+            var reader = new ZXing.BrowserMultiFormatReader();
+            reader.decodeFromImageElement(img).then(function(result) {
+                URL.revokeObjectURL(url);
+                hideLoading();
+                var barcode = result.getText();
+                debugLog('✓ ZXing photo scanned: ' + barcode);
+                onBarcodeScanned(barcode, result);
+            }).catch(function(err) {
+                URL.revokeObjectURL(url);
+                hideLoading();
+                debugLog('ZXing photo error: ' + (err.message || err.name || 'not found'));
+                showToast('No barcode detected. Try a clearer photo or enter manually.', 4000);
+            });
+        } catch (e) {
+            URL.revokeObjectURL(url);
+            hideLoading();
+            debugLog('ZXing exception: ' + e.message);
+            showToast('Error reading photo. Try manual entry.', 4000);
+        }
+    }
+
     function lookupBarcode(barcode) {
         showLoading('Looking up product...');
         
@@ -1773,6 +1858,18 @@
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     handleManualBarcode();
+                }
+            });
+        }
+        
+        // Photo capture for barcode (works great on iOS)
+        var barcodePhotoInput = document.getElementById('barcodePhotoInput');
+        if (barcodePhotoInput) {
+            barcodePhotoInput.addEventListener('change', function(e) {
+                var file = e.target.files && e.target.files[0];
+                if (file) {
+                    handleBarcodePhoto(file);
+                    barcodePhotoInput.value = '';
                 }
             });
         }
