@@ -853,39 +853,72 @@
         }
 
         var readerElement = document.getElementById('barcodeReader');
-        if (!readerElement) return;
+        if (!readerElement) {
+            console.error('Barcode reader element not found');
+            return;
+        }
 
+        // Stop existing scanner first
         if (state.barcodeScanner) {
-            state.barcodeScanner.stop().catch(function() {});
+            try {
+                state.barcodeScanner.stop().catch(function() {});
+            } catch (e) {
+                console.log('Scanner was not running');
+            }
         }
 
         state.barcodeScanner = new Html5Qrcode('barcodeReader');
-        state.isScannerActive = true;
-
+        
+        // Larger scanning box for better detection
         var config = {
-            fps: 10,
-            qrbox: { width: 250, height: 100 },
-            aspectRatio: 1.0,
+            fps: 15,
+            qrbox: { width: 280, height: 150 },
+            aspectRatio: 1.5,
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.EAN_13,
                 Html5QrcodeSupportedFormats.EAN_8,
                 Html5QrcodeSupportedFormats.UPC_A,
                 Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.CODE_128
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39
             ]
         };
+
+        showToast('Starting camera...', 2000);
+        console.log('Starting barcode scanner with config:', config);
 
         state.barcodeScanner.start(
             { facingMode: 'environment' },
             config,
-            onBarcodeScanned,
+            function(decodedText, decodedResult) {
+                // Success callback
+                console.log('Barcode detected:', decodedText, decodedResult);
+                onBarcodeScanned(decodedText, decodedResult);
+            },
             function(errorMessage) {
-                // Ignore scan errors (happens frequently during scanning)
+                // This fires constantly when no barcode is detected - that's normal
+                // Only log occasionally to avoid console spam
+                if (Math.random() < 0.01) {
+                    console.log('Scanning...', errorMessage);
+                }
             }
-        ).catch(function(err) {
+        ).then(function() {
+            state.isScannerActive = true;
+            showToast('Camera ready - point at barcode', 3000);
+            console.log('Scanner started successfully');
+        }).catch(function(err) {
             console.error('Error starting scanner:', err);
-            showToast('Could not access camera. Please allow camera access.', 4000);
             state.isScannerActive = false;
+            
+            if (err.toString().includes('NotAllowedError')) {
+                showToast('Camera access denied. Please allow camera in browser settings.', 5000);
+            } else if (err.toString().includes('NotFoundError')) {
+                showToast('No camera found on this device.', 4000);
+            } else if (err.toString().includes('NotReadableError')) {
+                showToast('Camera is in use by another app.', 4000);
+            } else {
+                showToast('Camera error: ' + err.toString().substring(0, 50), 4000);
+            }
         });
     }
 
