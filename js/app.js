@@ -692,9 +692,10 @@
             switch (event.error) {
                 case 'no-speech': errorMessage = 'No speech detected. Please try again.'; break;
                 case 'audio-capture': errorMessage = 'No microphone found.'; break;
-                case 'not-allowed': errorMessage = 'Microphone access denied.'; break;
-                case 'network': errorMessage = 'Network error.'; break;
-                default: errorMessage = 'Error: ' + event.error;
+                case 'not-allowed': errorMessage = 'Microphone access denied. Check Safari settings.'; break;
+                case 'service-not-allowed': errorMessage = 'Voice not available on iOS Safari. Use Type instead!'; break;
+                case 'network': errorMessage = 'Network error. Check your connection.'; break;
+                default: errorMessage = 'Voice error: ' + event.error + '. Try using Type instead.';
             }
             
             if (voiceRecognition.onError) voiceRecognition.onError(errorMessage);
