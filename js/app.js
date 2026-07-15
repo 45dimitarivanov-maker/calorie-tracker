@@ -959,46 +959,61 @@
             showToast('Camera ready - point at barcode', 3000);
         });
 
-        // Detection with confidence filtering and multiple reads
+        // Detection with strict confidence filtering
         var lastDetectedCodes = [];
-        var detectionThreshold = 3; // Need 3 consistent reads
+        var detectionThreshold = 5; // Need 5 consistent reads
+        var lastLogTime = 0;
         
         Quagga.onDetected(function(result) {
             if (!result || !result.codeResult || !result.codeResult.code) return;
             
             var code = result.codeResult.code;
+            var format = result.codeResult.format;
             var errors = result.codeResult.decodedCodes;
+            
+            // Validate barcode format (EAN-13 = 13 digits, EAN-8 = 8 digits, UPC = 12 digits)
+            if (!/^\d{8}$|^\d{12}$|^\d{13}$/.test(code)) {
+                return; // Silently ignore invalid format
+            }
             
             // Calculate average error (lower is better)
             var avgError = 0;
+            var validErrors = 0;
             if (errors && errors.length > 0) {
-                var errorSum = errors.reduce(function(sum, item) {
-                    return sum + (item.error || 0);
-                }, 0);
-                avgError = errorSum / errors.length;
+                for (var i = 0; i < errors.length; i++) {
+                    if (typeof errors[i].error === 'number') {
+                        avgError += errors[i].error;
+                        validErrors++;
+                    }
+                }
+                if (validErrors > 0) {
+                    avgError = avgError / validErrors;
+                }
             }
             
-            debugLog('Detected: ' + code + ' (err: ' + avgError.toFixed(3) + ')');
+            // Only log occasionally to reduce spam
+            var now = Date.now();
+            if (now - lastLogTime > 1000) {
+                debugLog('Candidate: ' + code + ' (err: ' + avgError.toFixed(4) + ')');
+                lastLogTime = now;
+            }
             
-            // Filter out low confidence reads (error > 0.1)
-            if (avgError > 0.1) {
-                debugLog('Skipped - low confidence');
-                return;
+            // STRICT: Only accept very low error reads (< 0.05)
+            if (avgError > 0.05) {
+                return; // Silently skip
             }
             
             // Add to recent detections
             lastDetectedCodes.push(code);
-            if (lastDetectedCodes.length > 5) {
+            if (lastDetectedCodes.length > 10) {
                 lastDetectedCodes.shift();
             }
             
-            // Check if we have consistent reads
+            // Check if we have consistent reads (same code 5 times)
             var codeCount = lastDetectedCodes.filter(function(c) { return c === code; }).length;
-            debugLog('Consistent reads: ' + codeCount + '/' + detectionThreshold);
             
             if (codeCount >= detectionThreshold) {
-                debugLog('CONFIRMED BARCODE: ' + code);
-                debugLog('Format: ' + result.codeResult.format);
+                debugLog('✓ CONFIRMED: ' + code + ' (' + format + ')');
                 lastDetectedCodes = []; // Reset
                 onBarcodeScanned(code, result);
             }
