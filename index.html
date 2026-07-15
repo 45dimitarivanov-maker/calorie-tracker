@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Barcode Scanner Library - html5-qrcode (most compatible) -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Barcode Scanner Library - ZXing Browser -->
+    <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -163,11 +163,15 @@
                 <!-- Barcode Scanner -->
                 <div class="scan-input-container" id="scanInputContainer" hidden>
                     <div class="scanner-wrapper">
-                        <div id="barcodeReader" class="barcode-reader"></div>
+                        <video id="barcodeVideo" class="barcode-reader" playsinline></video>
                     </div>
                     <p class="scan-hint">Point camera at a barcode</p>
                     <div id="scannerDebug" style="background: #1e1e1e; color: #0f0; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 8px; margin: 8px 0; max-height: 120px; overflow-y: auto; text-align: left;">Debug log will appear here...</div>
-                    <button class="btn btn-outline" id="stopScanBtn">Cancel Scan</button>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <input type="text" id="manualBarcodeInput" class="form-input" placeholder="Or enter barcode manually" pattern="\d+" style="flex: 1;">
+                        <button class="btn btn-primary" id="submitBarcodeBtn">Go</button>
+                    </div>
+                    <button class="btn btn-outline" id="stopScanBtn" style="margin-top: 8px; width: 100%;">Cancel Scan</button>
                 </div>
                 
                 <!-- Text Input -->

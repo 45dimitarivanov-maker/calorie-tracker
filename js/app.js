@@ -992,15 +992,16 @@
     };
 
     // ==========================================
-    // BARCODE SCANNER MODULE (html5-qrcode)
+    // BARCODE SCANNER MODULE (ZXing Browser)
     // ==========================================
 
-    var html5QrCode = null;
+    var zxingReader = null;
+    var zxingControls = null;
 
     function initBarcodeScanner() {
-        // Check if Html5Qrcode is available
-        if (typeof Html5Qrcode === 'undefined') {
-            console.warn('html5-qrcode library not loaded');
+        // ZXing exposes ZXingBrowser global
+        if (typeof ZXingBrowser === 'undefined') {
+            console.warn('ZXing library not loaded');
             return false;
         }
         return true;
@@ -1022,97 +1023,130 @@
     }
 
     function startBarcodeScanner() {
-        debugLog('Starting html5-qrcode scanner...');
+        debugLog('Starting ZXing scanner...');
         
         if (!initBarcodeScanner()) {
-            debugLog('ERROR: html5-qrcode not loaded');
+            debugLog('ERROR: ZXing library not loaded');
             showToast('Barcode scanner not available', 3000);
             return;
         }
-        debugLog('html5-qrcode loaded OK');
+        debugLog('ZXing loaded OK');
 
-        var readerElement = document.getElementById('barcodeReader');
-        if (!readerElement) {
-            debugLog('ERROR: Reader element not found');
+        var videoElement = document.getElementById('barcodeVideo');
+        if (!videoElement) {
+            debugLog('ERROR: Video element not found');
             return;
         }
-        debugLog('Reader element found');
+        debugLog('Video element found');
 
         // Stop existing scanner first
-        if (html5QrCode && state.isScannerActive) {
-            html5QrCode.stop().then(function() {
-                debugLog('Previous scanner stopped');
-                startScannerInternal();
-            }).catch(function(err) {
-                debugLog('Error stopping: ' + err);
-                startScannerInternal();
-            });
-        } else {
-            startScannerInternal();
+        if (state.isScannerActive) {
+            stopBarcodeScanner();
         }
+
+        startScannerInternal();
     }
 
     function startScannerInternal() {
         debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
 
-        html5QrCode = new Html5Qrcode("barcodeReader");
+        try {
+            // Restrict to common product barcode formats to reduce false positives
+            var hints = new Map();
+            var formats = [
+                ZXingBrowser.BarcodeFormat.EAN_13,
+                ZXingBrowser.BarcodeFormat.EAN_8,
+                ZXingBrowser.BarcodeFormat.UPC_A,
+                ZXingBrowser.BarcodeFormat.UPC_E,
+                ZXingBrowser.BarcodeFormat.CODE_128
+            ];
+            hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, formats);
+            hints.set(ZXingBrowser.DecodeHintType.TRY_HARDER, true);
 
-        var config = {
-            fps: 10,
-            qrbox: { width: 250, height: 150 },
-            aspectRatio: 1.777778,
-            formatsToSupport: [
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.CODE_128
-            ]
-        };
+            zxingReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+            debugLog('Reader created with format restrictions');
+        } catch (e) {
+            debugLog('ERROR creating reader: ' + e.message);
+            // Fallback without hints
+            zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
+        }
 
-        html5QrCode.start(
-            { facingMode: "environment" },
-            config,
-            function onScanSuccess(decodedText, decodedResult) {
-                debugLog('✓ SCANNED: ' + decodedText);
-                debugLog('Format: ' + decodedResult.result.format.formatName);
-                onBarcodeScanned(decodedText, decodedResult);
-            },
-            function onScanFailure(error) {
-                // Ignore - this fires constantly when no barcode in view
-            }
-        ).then(function() {
-            state.isScannerActive = true;
-            debugLog('Camera initialized!');
-            debugLog('Scanner running - point at barcode');
-            showToast('Camera ready - point at barcode', 3000);
-        }).catch(function(err) {
-            debugLog('ERROR: ' + err);
-            var errStr = String(err);
-            
-            if (errStr.includes('NotAllowed') || errStr.includes('Permission')) {
-                showToast('Camera access denied. Check browser permissions.', 5000);
-            } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
-                showToast('No camera found.', 4000);
-            } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
-                showToast('Camera busy - close other apps using it.', 4000);
-            } else {
-                showToast('Camera error: ' + errStr.substring(0, 50), 4000);
-            }
-        });
+        // Get camera devices and prefer back camera
+        ZXingBrowser.BrowserCodeReader.listVideoInputDevices()
+            .then(function(devices) {
+                debugLog('Found ' + devices.length + ' camera(s)');
+                
+                var selectedDeviceId = undefined;
+                if (devices.length > 0) {
+                    // Try to find back/environment camera
+                    var backCamera = devices.find(function(d) {
+                        return /back|rear|environment/i.test(d.label);
+                    });
+                    selectedDeviceId = backCamera ? backCamera.deviceId : devices[devices.length - 1].deviceId;
+                    debugLog('Using camera: ' + (backCamera ? 'back' : 'default'));
+                }
+
+                return zxingReader.decodeFromVideoDevice(
+                    selectedDeviceId,
+                    'barcodeVideo',
+                    function(result, err, controls) {
+                        if (controls && !zxingControls) {
+                            zxingControls = controls;
+                        }
+                        if (result) {
+                            var barcode = result.getText();
+                            var format = result.getBarcodeFormat();
+                            debugLog('✓ SCANNED: ' + barcode);
+                            debugLog('Format: ' + format);
+                            onBarcodeScanned(barcode, result);
+                        }
+                        // Ignore errors - they fire constantly when no barcode found
+                    }
+                );
+            })
+            .then(function(controls) {
+                if (controls) {
+                    zxingControls = controls;
+                }
+                state.isScannerActive = true;
+                debugLog('Camera initialized!');
+                debugLog('Scanner running - point at barcode');
+                showToast('Camera ready - point at barcode', 3000);
+            })
+            .catch(function(err) {
+                debugLog('ERROR: ' + err.message);
+                var errStr = String(err.message || err);
+                
+                if (errStr.includes('NotAllowed') || errStr.includes('Permission') || errStr.includes('denied')) {
+                    showToast('Camera access denied. Check browser permissions.', 5000);
+                } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
+                    showToast('No camera found.', 4000);
+                } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
+                    showToast('Camera busy - close other apps using it.', 4000);
+                } else {
+                    showToast('Camera error: ' + errStr.substring(0, 60), 4000);
+                }
+            });
     }
 
     function stopBarcodeScanner() {
-        if (html5QrCode && state.isScannerActive) {
-            html5QrCode.stop().then(function() {
-                state.isScannerActive = false;
-                debugLog('Scanner stopped');
-            }).catch(function(err) {
-                console.error('Error stopping scanner:', err);
-                state.isScannerActive = false;
-            });
+        try {
+            if (zxingControls) {
+                zxingControls.stop();
+                zxingControls = null;
+                debugLog('Scanner stopped (controls)');
+            }
+            if (zxingReader) {
+                if (typeof zxingReader.reset === 'function') {
+                    zxingReader.reset();
+                }
+                zxingReader = null;
+            }
+        } catch (err) {
+            console.error('Error stopping scanner:', err);
         }
+        state.isScannerActive = false;
     }
 
     function onBarcodeScanned(barcode, result) {
@@ -1609,6 +1643,30 @@
             stopScanBtn.addEventListener('click', function() {
                 stopBarcodeScanner();
                 setInputMode('voice');
+            });
+        }
+        
+        // Manual barcode entry
+        var submitBarcodeBtn = document.getElementById('submitBarcodeBtn');
+        var manualBarcodeInput = document.getElementById('manualBarcodeInput');
+        if (submitBarcodeBtn && manualBarcodeInput) {
+            var handleManualBarcode = function() {
+                var barcode = manualBarcodeInput.value.trim();
+                if (!/^\d{8,13}$/.test(barcode)) {
+                    showToast('Please enter a valid 8-13 digit barcode', 3000);
+                    return;
+                }
+                debugLog('Manual entry: ' + barcode);
+                stopBarcodeScanner();
+                manualBarcodeInput.value = '';
+                onBarcodeScanned(barcode, null);
+            };
+            submitBarcodeBtn.addEventListener('click', handleManualBarcode);
+            manualBarcodeInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleManualBarcode();
+                }
             });
         }
         
