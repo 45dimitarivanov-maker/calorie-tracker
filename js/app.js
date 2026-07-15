@@ -992,29 +992,8 @@
     };
 
     // ==========================================
-    // BARCODE SCANNER MODULE (Native BarcodeDetector API + ZXing fallback)
+    // BARCODE SCANNER MODULE (OpenAI Vision API)
     // ==========================================
-
-    var zxingReader = null;
-    var zxingControls = null;
-    var barcodeDetector = null;
-    var scannerVideoStream = null;
-    var scannerAnimationFrame = null;
-
-    function initBarcodeScanner() {
-        // Check if native BarcodeDetector API is available (preferred)
-        if ('BarcodeDetector' in window) {
-            console.log('Native BarcodeDetector API available');
-            return 'native';
-        }
-        // Fallback: ZXing library
-        if (typeof ZXing !== 'undefined') {
-            console.log('Using ZXing fallback');
-            return 'zxing';
-        }
-        console.warn('No barcode scanner available');
-        return false;
-    }
 
     // Debug logging function that shows on page
     function debugLog(message) {
@@ -1023,7 +1002,6 @@
         if (debugPanel) {
             var time = new Date().toLocaleTimeString();
             debugPanel.innerHTML = '<strong>' + time + '</strong>: ' + message + '<br>' + debugPanel.innerHTML;
-            // Keep only last 10 messages
             var lines = debugPanel.innerHTML.split('<br>');
             if (lines.length > 10) {
                 debugPanel.innerHTML = lines.slice(0, 10).join('<br>');
@@ -1031,417 +1009,114 @@
         }
     }
 
+    // No-op: scanner is now photo-based only, no live camera
     function startBarcodeScanner() {
-        debugLog('Starting barcode scanner...');
-        
-        var scannerType = initBarcodeScanner();
-        if (!scannerType) {
-            debugLog('ERROR: No scanner library available');
-            showToast('Barcode scanner not available', 3000);
-            return;
-        }
-
-        var videoElement = document.getElementById('barcodeVideo');
-        if (!videoElement) {
-            debugLog('ERROR: Video element not found');
-            return;
-        }
-        debugLog('Video element found');
-
-        // Stop existing scanner first
-        if (state.isScannerActive) {
-            stopBarcodeScanner();
-        }
-
-        if (scannerType === 'native') {
-            debugLog('Using Native BarcodeDetector API');
-            startNativeScannerInternal();
-        } else {
-            debugLog('Using ZXing library');
-            startZxingScannerInternal();
-        }
-    }
-
-    // NATIVE BARCODE DETECTOR API (preferred - much faster and more reliable)
-    function startNativeScannerInternal() {
-        debugLog('Requesting camera access...');
-        showToast('Starting camera...', 2000);
-
-        try {
-            // Create BarcodeDetector with common product formats
-            barcodeDetector = new BarcodeDetector({
-                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
-            });
-            debugLog('BarcodeDetector created');
-        } catch (e) {
-            debugLog('BarcodeDetector error: ' + e.message + ' - trying without formats');
-            try {
-                barcodeDetector = new BarcodeDetector();
-            } catch (e2) {
-                debugLog('Failed to create detector: ' + e2.message);
-                return;
-            }
-        }
-
-        var videoElement = document.getElementById('barcodeVideo');
-        var constraints = {
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        };
-
-        navigator.mediaDevices.getUserMedia(constraints)
-            .then(function(stream) {
-                scannerVideoStream = stream;
-                videoElement.srcObject = stream;
-                videoElement.setAttribute('playsinline', 'true');
-                return videoElement.play();
-            })
-            .then(function() {
-                state.isScannerActive = true;
-                debugLog('Camera started - scanning...');
-                showToast('Camera ready - point at barcode', 3000);
-                
-                var frameCount = 0;
-                var lastStatusTime = Date.now();
-
-                function scanFrame() {
-                    if (!state.isScannerActive || !barcodeDetector || !videoElement.videoWidth) {
-                        if (state.isScannerActive) {
-                            scannerAnimationFrame = requestAnimationFrame(scanFrame);
-                        }
-                        return;
-                    }
-                    
-                    frameCount++;
-                    
-                    // Log status every ~3 seconds
-                    var now = Date.now();
-                    if (now - lastStatusTime > 3000) {
-                        debugLog('Scanning... frames: ' + frameCount);
-                        lastStatusTime = now;
-                    }
-
-                    barcodeDetector.detect(videoElement)
-                        .then(function(barcodes) {
-                            if (barcodes && barcodes.length > 0) {
-                                var barcode = barcodes[0];
-                                debugLog('✓ SCANNED: ' + barcode.rawValue);
-                                debugLog('Format: ' + barcode.format);
-                                onBarcodeScanned(barcode.rawValue, barcode);
-                                return;
-                            }
-                            if (state.isScannerActive) {
-                                scannerAnimationFrame = requestAnimationFrame(scanFrame);
-                            }
-                        })
-                        .catch(function(err) {
-                            console.error('Detection error:', err);
-                            if (state.isScannerActive) {
-                                scannerAnimationFrame = requestAnimationFrame(scanFrame);
-                            }
-                        });
-                }
-                
-                scanFrame();
-            })
-            .catch(function(err) {
-                debugLog('Camera error: ' + err.message);
-                handleCameraError(err);
-            });
-    }
-
-    // ZXING FALLBACK
-    function startZxingScannerInternal() {
-        debugLog('Requesting camera access...');
-        showToast('Starting camera...', 2000);
-
-        try {
-            zxingReader = new ZXing.BrowserMultiFormatReader();
-            debugLog('Reader created (default settings)');
-        } catch (e) {
-            debugLog('ERROR creating reader: ' + e.message);
-            return;
-        }
-
-        zxingReader.listVideoInputDevices()
-            .then(function(devices) {
-                debugLog('Found ' + devices.length + ' camera(s)');
-                
-                var selectedDeviceId = undefined;
-                if (devices.length > 0) {
-                    var backCamera = devices.find(function(d) {
-                        return /back|rear|environment/i.test(d.label);
-                    });
-                    selectedDeviceId = backCamera ? backCamera.deviceId : devices[devices.length - 1].deviceId;
-                    debugLog('Using camera: ' + (backCamera ? 'back' : 'default'));
-                }
-
-                var frameCount = 0;
-                var lastStatusTime = Date.now();
-
-                zxingReader.decodeFromVideoDevice(
-                    selectedDeviceId,
-                    'barcodeVideo',
-                    function(result, err) {
-                        frameCount++;
-                        var now = Date.now();
-                        if (now - lastStatusTime > 3000) {
-                            debugLog('Scanning... frames: ' + frameCount);
-                            lastStatusTime = now;
-                        }
-                        if (result) {
-                            debugLog('✓ SCANNED: ' + result.getText());
-                            onBarcodeScanned(result.getText(), result);
-                        }
-                    }
-                );
-                
-                state.isScannerActive = true;
-                debugLog('Camera initialized!');
-                showToast('Camera ready - point at barcode', 3000);
-            })
-            .catch(function(err) {
-                debugLog('ERROR: ' + err.message);
-                handleCameraError(err);
-            });
-    }
-
-    function handleCameraError(err) {
-        var errStr = String(err.message || err);
-        if (errStr.includes('NotAllowed') || errStr.includes('Permission') || errStr.includes('denied')) {
-            showToast('Camera access denied. Check browser permissions.', 5000);
-        } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
-            showToast('No camera found.', 4000);
-        } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
-            showToast('Camera busy - close other apps using it.', 4000);
-        } else {
-            showToast('Camera error: ' + errStr.substring(0, 60), 4000);
-        }
+        debugLog('Ready - tap "Take Photo of Barcode"');
+        state.isScannerActive = false;
     }
 
     function stopBarcodeScanner() {
-        try {
-            state.isScannerActive = false;
-            
-            // Cancel animation frame (native scanner)
-            if (scannerAnimationFrame) {
-                cancelAnimationFrame(scannerAnimationFrame);
-                scannerAnimationFrame = null;
-            }
-            
-            // Stop camera stream (native scanner)
-            if (scannerVideoStream) {
-                scannerVideoStream.getTracks().forEach(function(track) { track.stop(); });
-                scannerVideoStream = null;
-                var videoElement = document.getElementById('barcodeVideo');
-                if (videoElement) videoElement.srcObject = null;
-            }
-            
-            // Stop ZXing reader
-            if (zxingReader) {
-                if (typeof zxingReader.reset === 'function') {
-                    zxingReader.reset();
-                }
-                zxingReader = null;
-            }
-            zxingControls = null;
-            barcodeDetector = null;
-            
-            debugLog('Scanner stopped');
-        } catch (err) {
-            console.error('Error stopping scanner:', err);
-        }
+        state.isScannerActive = false;
     }
 
     function onBarcodeScanned(barcode, result) {
-        // Stop scanner immediately to prevent multiple scans
         stopBarcodeScanner();
         showToast('Barcode detected: ' + barcode, 2000);
-        
-        // Look up product in Open Food Facts
         lookupBarcode(barcode);
     }
 
-    // Decode barcode from a photo file (works great on iOS)
+    // Decode barcode from a photo using OpenAI Vision API
     function handleBarcodePhoto(file) {
         debugLog('Photo captured: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)');
-        showLoading('Reading barcode from photo...');
         
-        stopBarcodeScanner();
-        
-        var img = new Image();
-        var url = URL.createObjectURL(file);
-        
-        img.onload = function() {
-            debugLog('Image loaded: ' + img.width + 'x' + img.height);
-            
-            // Try Native BarcodeDetector first
-            if ('BarcodeDetector' in window) {
-                debugLog('Using Native BarcodeDetector on photo');
-                var detector;
-                try {
-                    detector = new BarcodeDetector({
-                        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
-                    });
-                } catch (e) {
-                    detector = new BarcodeDetector();
-                }
-                
-                detector.detect(img).then(function(barcodes) {
-                    if (barcodes && barcodes.length > 0) {
-                        URL.revokeObjectURL(url);
-                        hideLoading();
-                        var b = barcodes[0];
-                        debugLog('✓ Photo scanned: ' + b.rawValue);
-                        onBarcodeScanned(b.rawValue, b);
-                    } else {
-                        debugLog('Native: no barcode. Trying ZXing...');
-                        tryZxingOnImage(img, url);
-                    }
-                }).catch(function(err) {
-                    debugLog('Native detector error: ' + (err.message || err));
-                    tryZxingOnImage(img, url);
-                });
-            } else {
-                tryZxingOnImage(img, url);
-            }
-        };
-        
-        img.onerror = function() {
-            URL.revokeObjectURL(url);
-            hideLoading();
-            debugLog('Failed to load image');
-            showToast('Failed to load photo', 3000);
-        };
-        
-        img.src = url;
-    }
-
-    function tryZxingOnImage(img, url) {
-        if (typeof ZXing === 'undefined') {
-            // Try OpenAI Vision as last resort
-            tryOpenAIVisionOnImage(url);
-            return;
-        }
-        
-        try {
-            var reader = new ZXing.BrowserMultiFormatReader();
-            reader.decodeFromImageElement(img).then(function(result) {
-                URL.revokeObjectURL(url);
-                hideLoading();
-                var barcode = result.getText();
-                debugLog('✓ ZXing photo scanned: ' + barcode);
-                onBarcodeScanned(barcode, result);
-            }).catch(function(err) {
-                debugLog('ZXing photo error: ' + (err.message || err.name || 'not found'));
-                debugLog('Falling back to OpenAI Vision...');
-                // Fall back to OpenAI Vision API
-                tryOpenAIVisionOnImage(url);
-            });
-        } catch (e) {
-            debugLog('ZXing exception: ' + e.message);
-            tryOpenAIVisionOnImage(url);
-        }
-    }
-
-    // OpenAI Vision fallback for barcode reading (~$0.0002 per scan)
-    function tryOpenAIVisionOnImage(url) {
         var apiKey = getApiKey();
         if (!apiKey) {
-            URL.revokeObjectURL(url);
-            hideLoading();
-            showToast('Add OpenAI API key in Settings to use AI barcode reading', 4000);
+            debugLog('No API key');
+            showToast('Add OpenAI API key in Settings first', 4000);
             return;
         }
         
-        debugLog('Using OpenAI Vision API to read barcode...');
         showLoading('Reading barcode with AI...');
+        debugLog('Sending to OpenAI Vision...');
         
-        // Fetch image as blob and convert to base64
-        fetch(url)
-            .then(function(res) { return res.blob(); })
-            .then(function(blob) {
-                return new Promise(function(resolve, reject) {
-                    var reader = new FileReader();
-                    reader.onload = function() { resolve(reader.result); };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-            })
-            .then(function(dataUrl) {
-                // Call OpenAI Vision API
-                return fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + apiKey
-                    },
-                    body: JSON.stringify({
-                        model: 'gpt-4o-mini',
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: 'Read the barcode number from this image. Reply with ONLY the digits of the barcode number, no other text. If you cannot see a clear barcode, reply with "NONE".'
-                                },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: dataUrl,
-                                        detail: 'low'
-                                    }
+        // Convert file to base64 data URL
+        var reader = new FileReader();
+        reader.onload = function() {
+            var dataUrl = reader.result;
+            debugLog('Image converted to base64');
+            
+            fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + apiKey
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'text',
+                                text: 'Read the barcode number from this image. The barcode digits are usually printed below the black bars. Reply with ONLY the digits of the barcode number, no other text. If you cannot see a clear barcode with digits, reply with "NONE".'
+                            },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: dataUrl,
+                                    detail: 'high'
                                 }
-                            ]
-                        }],
-                        max_tokens: 30,
-                        temperature: 0
-                    })
-                });
+                            }
+                        ]
+                    }],
+                    max_tokens: 30,
+                    temperature: 0
+                })
             })
             .then(function(response) {
                 if (!response.ok) {
                     return response.text().then(function(text) {
-                        throw new Error('OpenAI API error: ' + response.status + ' - ' + text);
+                        throw new Error('API ' + response.status + ': ' + text);
                     });
                 }
                 return response.json();
             })
             .then(function(data) {
-                URL.revokeObjectURL(url);
                 hideLoading();
                 
                 var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
                 if (!content) {
-                    debugLog('OpenAI returned no content');
-                    showToast('AI could not read barcode. Try again or enter manually.', 4000);
+                    debugLog('AI returned no content');
+                    showToast('AI could not read barcode. Try again.', 4000);
                     return;
                 }
                 
                 var trimmed = content.trim();
-                debugLog('OpenAI response: "' + trimmed + '"');
+                debugLog('AI response: "' + trimmed + '"');
                 
-                // Extract digits only from response
                 var digits = trimmed.replace(/\D/g, '');
                 
                 if (trimmed.toUpperCase().includes('NONE') || !digits || digits.length < 8) {
-                    debugLog('No valid barcode in response');
+                    debugLog('No valid barcode');
                     showToast('AI could not read barcode. Try a clearer photo.', 4000);
                     return;
                 }
                 
-                debugLog('✓ AI extracted barcode: ' + digits);
+                debugLog('✓ Barcode: ' + digits);
                 onBarcodeScanned(digits, null);
             })
             .catch(function(err) {
-                URL.revokeObjectURL(url);
                 hideLoading();
-                debugLog('OpenAI Vision error: ' + err.message);
+                debugLog('Error: ' + err.message);
                 showToast('AI barcode reading failed: ' + err.message.substring(0, 60), 4000);
             });
+        };
+        reader.onerror = function() {
+            hideLoading();
+            debugLog('Failed to read image file');
+            showToast('Failed to read photo', 3000);
+        };
+        reader.readAsDataURL(file);
     }
 
     function lookupBarcode(barcode) {
