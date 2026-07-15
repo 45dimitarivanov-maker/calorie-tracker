@@ -854,13 +854,15 @@
     };
 
     // ==========================================
-    // BARCODE SCANNER MODULE (QuaggaJS)
+    // BARCODE SCANNER MODULE (html5-qrcode)
     // ==========================================
 
+    var html5QrCode = null;
+
     function initBarcodeScanner() {
-        // Check if Quagga is available
-        if (typeof Quagga === 'undefined') {
-            console.warn('QuaggaJS library not loaded');
+        // Check if Html5Qrcode is available
+        if (typeof Html5Qrcode === 'undefined') {
+            console.warn('html5-qrcode library not loaded');
             return false;
         }
         return true;
@@ -882,14 +884,14 @@
     }
 
     function startBarcodeScanner() {
-        debugLog('Starting QuaggaJS scanner...');
+        debugLog('Starting html5-qrcode scanner...');
         
         if (!initBarcodeScanner()) {
-            debugLog('ERROR: QuaggaJS library not loaded');
+            debugLog('ERROR: html5-qrcode not loaded');
             showToast('Barcode scanner not available', 3000);
             return;
         }
-        debugLog('QuaggaJS loaded OK');
+        debugLog('html5-qrcode loaded OK');
 
         var readerElement = document.getElementById('barcodeReader');
         if (!readerElement) {
@@ -899,147 +901,79 @@
         debugLog('Reader element found');
 
         // Stop existing scanner first
-        if (state.isScannerActive) {
-            Quagga.stop();
-            debugLog('Previous scanner stopped');
+        if (html5QrCode && state.isScannerActive) {
+            html5QrCode.stop().then(function() {
+                debugLog('Previous scanner stopped');
+                startScannerInternal();
+            }).catch(function(err) {
+                debugLog('Error stopping: ' + err);
+                startScannerInternal();
+            });
+        } else {
+            startScannerInternal();
         }
+    }
 
+    function startScannerInternal() {
         debugLog('Requesting camera access...');
         showToast('Starting camera...', 2000);
 
-        Quagga.init({
-            inputStream: {
-                name: "Live",
-                type: "LiveStream",
-                target: readerElement,
-                constraints: {
-                    width: { min: 640 },
-                    height: { min: 480 },
-                    facingMode: "environment"
-                }
+        html5QrCode = new Html5Qrcode("barcodeReader");
+
+        var config = {
+            fps: 10,
+            qrbox: { width: 250, height: 150 },
+            aspectRatio: 1.777778,
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_128
+            ]
+        };
+
+        html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            function onScanSuccess(decodedText, decodedResult) {
+                debugLog('✓ SCANNED: ' + decodedText);
+                debugLog('Format: ' + decodedResult.result.format.formatName);
+                onBarcodeScanned(decodedText, decodedResult);
             },
-            locator: {
-                patchSize: "medium",
-                halfSample: true
-            },
-            numOfWorkers: navigator.hardwareConcurrency || 4,
-            frequency: 10,
-            decoder: {
-                readers: [
-                    "ean_reader",
-                    "ean_8_reader",
-                    "upc_reader",
-                    "upc_e_reader",
-                    "code_128_reader"
-                ]
-            },
-            locate: true
-        }, function(err) {
-            if (err) {
-                debugLog('ERROR: ' + err.message);
-                var errStr = err.toString();
-                
-                if (errStr.includes('NotAllowed') || errStr.includes('Permission')) {
-                    showToast('Camera access denied. Check browser permissions.', 5000);
-                } else if (errStr.includes('NotFound')) {
-                    showToast('No camera found.', 4000);
-                } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
-                    showToast('Camera busy - close other apps using it.', 4000);
-                } else {
-                    showToast('Camera error: ' + err.message.substring(0, 50), 4000);
-                }
-                return;
+            function onScanFailure(error) {
+                // Ignore - this fires constantly when no barcode in view
             }
-            
-            debugLog('Camera initialized!');
-            Quagga.start();
+        ).then(function() {
             state.isScannerActive = true;
+            debugLog('Camera initialized!');
             debugLog('Scanner running - point at barcode');
-            debugLog('TIP: Hold steady, good lighting');
             showToast('Camera ready - point at barcode', 3000);
-        });
-
-        // Detection with strict confidence filtering
-        var lastDetectedCodes = [];
-        var detectionThreshold = 5; // Need 5 consistent reads
-        var lastLogTime = 0;
-        
-        Quagga.onDetected(function(result) {
-            if (!result || !result.codeResult || !result.codeResult.code) return;
+        }).catch(function(err) {
+            debugLog('ERROR: ' + err);
+            var errStr = String(err);
             
-            var code = result.codeResult.code;
-            var format = result.codeResult.format;
-            var errors = result.codeResult.decodedCodes;
-            
-            // Validate barcode format (EAN-13 = 13 digits, EAN-8 = 8 digits, UPC = 12 digits)
-            if (!/^\d{8}$|^\d{12}$|^\d{13}$/.test(code)) {
-                return; // Silently ignore invalid format
-            }
-            
-            // Calculate average error (lower is better)
-            var avgError = 0;
-            var validErrors = 0;
-            if (errors && errors.length > 0) {
-                for (var i = 0; i < errors.length; i++) {
-                    if (typeof errors[i].error === 'number') {
-                        avgError += errors[i].error;
-                        validErrors++;
-                    }
-                }
-                if (validErrors > 0) {
-                    avgError = avgError / validErrors;
-                }
-            }
-            
-            // Only log occasionally to reduce spam
-            var now = Date.now();
-            if (now - lastLogTime > 1000) {
-                debugLog('Candidate: ' + code + ' (err: ' + avgError.toFixed(4) + ')');
-                lastLogTime = now;
-            }
-            
-            // STRICT: Only accept very low error reads (< 0.05)
-            if (avgError > 0.05) {
-                return; // Silently skip
-            }
-            
-            // Add to recent detections
-            lastDetectedCodes.push(code);
-            if (lastDetectedCodes.length > 10) {
-                lastDetectedCodes.shift();
-            }
-            
-            // Check if we have consistent reads (same code 5 times)
-            var codeCount = lastDetectedCodes.filter(function(c) { return c === code; }).length;
-            
-            if (codeCount >= detectionThreshold) {
-                debugLog('✓ CONFIRMED: ' + code + ' (' + format + ')');
-                lastDetectedCodes = []; // Reset
-                onBarcodeScanned(code, result);
-            }
-        });
-
-        // Processing callback (shows scanning is active)
-        var processCount = 0;
-        Quagga.onProcessed(function(result) {
-            processCount++;
-            if (processCount % 30 === 0) { // Log every ~3 seconds
-                debugLog('Scanning... (frames: ' + processCount + ')');
+            if (errStr.includes('NotAllowed') || errStr.includes('Permission')) {
+                showToast('Camera access denied. Check browser permissions.', 5000);
+            } else if (errStr.includes('NotFound') || errStr.includes('no camera')) {
+                showToast('No camera found.', 4000);
+            } else if (errStr.includes('NotReadable') || errStr.includes('busy')) {
+                showToast('Camera busy - close other apps using it.', 4000);
+            } else {
+                showToast('Camera error: ' + errStr.substring(0, 50), 4000);
             }
         });
     }
 
     function stopBarcodeScanner() {
-        if (state.isScannerActive) {
-            try {
-                Quagga.stop();
-                Quagga.offDetected();
-                Quagga.offProcessed();
+        if (html5QrCode && state.isScannerActive) {
+            html5QrCode.stop().then(function() {
                 state.isScannerActive = false;
                 debugLog('Scanner stopped');
-            } catch (err) {
+            }).catch(function(err) {
                 console.error('Error stopping scanner:', err);
-            }
+                state.isScannerActive = false;
+            });
         }
     }
 
