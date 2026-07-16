@@ -1533,21 +1533,106 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
 
     var USDA_API_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
     var USDA_API_KEY = 'DEMO_KEY'; // Free demo key, works with rate limits
+    var OFF_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
+
+    // Bulgarian to English food translations for common foods
+    var BG_TO_EN = {
+        'кисело мляко': 'yogurt',
+        'мляко': 'milk',
+        'яйце': 'egg',
+        'яйца': 'eggs',
+        'хляб': 'bread',
+        'сирене': 'feta cheese',
+        'кашкавал': 'yellow cheese',
+        'масло': 'butter',
+        'пилешко': 'chicken',
+        'пиле': 'chicken',
+        'говеждо': 'beef',
+        'свинско': 'pork',
+        'риба': 'fish',
+        'ориз': 'rice',
+        'картофи': 'potato',
+        'домати': 'tomato',
+        'краставици': 'cucumber',
+        'лук': 'onion',
+        'чесън': 'garlic',
+        'банан': 'banana',
+        'ябълка': 'apple',
+        'портокал': 'orange',
+        'кафе': 'coffee',
+        'чай': 'tea',
+        'захар': 'sugar',
+        'сол': 'salt',
+        'олио': 'sunflower oil',
+        'зехтин': 'olive oil',
+        'баница': 'filo pastry cheese pie',
+        'кебапче': 'grilled minced meat',
+        'кюфте': 'meatball',
+        'шопска салата': 'shopska salad tomato cucumber cheese',
+        'таратор': 'cold yogurt cucumber soup',
+        'лютеница': 'pepper tomato spread',
+        'овесени ядки': 'oats',
+        'овесена каша': 'oatmeal'
+    };
+
+    function translateBulgarianFood(query) {
+        var lowerQuery = query.toLowerCase().trim();
+        // Check exact match first
+        if (BG_TO_EN[lowerQuery]) {
+            return BG_TO_EN[lowerQuery];
+        }
+        // Check partial matches
+        for (var bg in BG_TO_EN) {
+            if (lowerQuery.indexOf(bg) !== -1) {
+                return BG_TO_EN[bg];
+            }
+        }
+        return query; // Return original if no translation
+    }
 
     function searchFoodDatabase(query) {
         if (!query || query.trim().length < 2) {
             return Promise.resolve([]);
         }
 
+        // Try to translate Bulgarian to English for better results
+        var translatedQuery = translateBulgarianFood(query);
+        var originalQuery = query.trim();
+        
+        // Search USDA first with translated query
+        return searchUSDA(translatedQuery)
+            .then(function(results) {
+                if (results.length >= 3) {
+                    return results;
+                }
+                // If USDA has few/no results, also search OpenFoodFacts
+                return searchOpenFoodFacts(originalQuery)
+                    .then(function(offResults) {
+                        // Combine results, USDA first, then OFF
+                        var combined = results.concat(offResults);
+                        // Remove duplicates by name similarity
+                        var seen = {};
+                        return combined.filter(function(food) {
+                            var key = food.name.toLowerCase().substring(0, 20);
+                            if (seen[key]) return false;
+                            seen[key] = true;
+                            return true;
+                        }).slice(0, 15);
+                    });
+            });
+    }
+
+    function searchUSDA(query) {
         var url = USDA_API_URL + '?api_key=' + USDA_API_KEY + 
-            '&query=' + encodeURIComponent(query.trim()) +
+            '&query=' + encodeURIComponent(query) +
             '&pageSize=15' +
             '&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)';
 
         return fetch(url)
             .then(function(response) {
                 if (!response.ok) {
-                    throw new Error('USDA API error: ' + response.status);
+                    console.warn('USDA API error:', response.status);
+                    return { foods: [] };
                 }
                 return response.json();
             })
@@ -1556,12 +1641,8 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
                     return [];
                 }
 
-                // Map USDA response to our format (per 100g)
                 return data.foods.slice(0, 15).map(function(food) {
                     var nutrients = food.foodNutrients || [];
-                    
-                    // Find macronutrients by nutrient ID
-                    // Energy: 1008 (kcal), Protein: 1003, Carbs: 1005, Fat: 1004, Fiber: 1079
                     var calories = findNutrient(nutrients, [1008, 208]) || 0;
                     var protein = findNutrient(nutrients, [1003, 203]) || 0;
                     var carbs = findNutrient(nutrients, [1005, 205]) || 0;
@@ -1577,12 +1658,65 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
                         carbs: Math.round(carbs * 10) / 10,
                         fat: Math.round(fat * 10) / 10,
                         fiber: Math.round(fiber * 10) / 10,
-                        dataType: food.dataType
+                        source: 'usda'
                     };
                 }).filter(function(food) {
-                    // Filter out items without calorie data
                     return food.calories > 0;
                 });
+            })
+            .catch(function(err) {
+                console.warn('USDA search failed:', err);
+                return [];
+            });
+    }
+
+    function searchOpenFoodFacts(query) {
+        var url = OFF_SEARCH_URL + '?search_terms=' + encodeURIComponent(query) +
+            '&search_simple=1&action=process&json=1&page_size=15&fields=product_name,brands,nutriments,code';
+
+        return fetch(url)
+            .then(function(response) {
+                if (!response.ok) {
+                    console.warn('OFF API error:', response.status);
+                    return { products: [] };
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (!data.products || data.products.length === 0) {
+                    return [];
+                }
+
+                return data.products.slice(0, 15).map(function(product) {
+                    var n = product.nutriments || {};
+                    var name = product.product_name || 'Unknown';
+                    var brand = product.brands || '';
+                    
+                    // OFF stores per 100g values
+                    var calories = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g'] / 4.184 : 0);
+                    var protein = n['proteins_100g'] || 0;
+                    var carbs = n['carbohydrates_100g'] || 0;
+                    var fat = n['fat_100g'] || 0;
+                    var fiber = n['fiber_100g'] || 0;
+
+                    return {
+                        offCode: product.code,
+                        name: name,
+                        brand: brand,
+                        calories: Math.round(calories),
+                        protein: Math.round(protein * 10) / 10,
+                        carbs: Math.round(carbs * 10) / 10,
+                        fat: Math.round(fat * 10) / 10,
+                        fiber: Math.round(fiber * 10) / 10,
+                        source: 'openfoodfacts'
+                    };
+                }).filter(function(food) {
+                    return food.calories > 0 && food.name && food.name !== 'Unknown';
+                });
+            })
+            .catch(function(err) {
+                console.warn('OFF search failed:', err);
+                return [];
             });
     }
 
