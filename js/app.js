@@ -408,6 +408,12 @@
         const macrosText = hasMacros ? 
             'P: ' + (entry.protein || 0).toFixed(1) + 'g · C: ' + (entry.carbs || 0).toFixed(1) + 'g · F: ' + (entry.fat || 0).toFixed(1) + 'g' : '';
         
+        const isAlreadyFavorite = isFavorite(entry.name);
+        const starClass = isAlreadyFavorite ? 'star-btn is-favorite' : 'star-btn';
+        const starIcon = isAlreadyFavorite ? 
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' :
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>';
+        
         div.innerHTML = 
             '<div class="food-entry-info">' +
                 '<div class="food-entry-name">' + escapeHtml(entry.name) + '</div>' +
@@ -416,12 +422,25 @@
                 '</div>' +
             '</div>' +
             '<div class="food-entry-calories">' + entry.calories + ' <span>kcal</span></div>' +
+            '<button class="' + starClass + '" aria-label="' + (isAlreadyFavorite ? 'Already in favorites' : 'Add to favorites') + '">' + starIcon + '</button>' +
             '<button class="delete-btn" aria-label="Delete entry">' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
                     '<polyline points="3 6 5 6 21 6"></polyline>' +
                     '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
                 '</svg>' +
             '</button>';
+        
+        const starBtn = div.querySelector('.star-btn');
+        starBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!starBtn.classList.contains('is-favorite')) {
+                handleAddToFavorites(entry);
+                starBtn.classList.add('is-favorite');
+                starBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>';
+            } else {
+                showToast('Already in favorites!', 2000);
+            }
+        });
         
         const deleteBtn = div.querySelector('.delete-btn');
         deleteBtn.addEventListener('click', function() {
@@ -2148,63 +2167,135 @@ EXAMPLE for "chicken":
         return recent;
     }
 
-    function renderQuickAddChips() {
-        var quickAddSection = document.getElementById('quickAddSection');
-        var quickAddChips = document.getElementById('quickAddChips');
+    // ==========================================
+    // FAVORITES UI MODULE
+    // ==========================================
+
+    function renderFavorites(filterText) {
+        var favoritesSection = document.getElementById('favoritesSection');
+        var favoritesList = document.getElementById('favoritesList');
+        var favoritesEmpty = document.getElementById('favoritesEmpty');
+        var favoritesCount = document.getElementById('favoritesCount');
         
-        if (!quickAddSection || !quickAddChips) return;
+        if (!favoritesList) return;
         
-        var recentFoods = getRecentFoods();
+        var favorites = getAllFavorites();
         
-        if (recentFoods.length === 0) {
-            quickAddSection.hidden = true;
+        // Apply filter if provided
+        if (filterText && filterText.trim()) {
+            var lowerFilter = filterText.toLowerCase().trim();
+            favorites = favorites.filter(function(f) {
+                return f.name.toLowerCase().indexOf(lowerFilter) !== -1;
+            });
+        }
+        
+        // Update count
+        var totalCount = getAllFavorites().length;
+        if (favoritesCount) {
+            favoritesCount.textContent = totalCount > 0 ? totalCount + ' saved' : '';
+        }
+        
+        // Clear existing cards
+        var existingCards = favoritesList.querySelectorAll('.favorite-card');
+        existingCards.forEach(function(el) { el.remove(); });
+        
+        if (favorites.length === 0) {
+            if (favoritesEmpty) {
+                if (totalCount === 0) {
+                    favoritesEmpty.textContent = 'No favorites yet. Add foods and tap ⭐ to save them!';
+                } else {
+                    favoritesEmpty.textContent = 'No matches found';
+                }
+                favoritesEmpty.hidden = false;
+            }
             return;
         }
         
-        quickAddSection.hidden = false;
-        quickAddChips.innerHTML = '';
+        if (favoritesEmpty) favoritesEmpty.hidden = true;
         
-        recentFoods.slice(0, 6).forEach(function(food, index) {
-            var chip = document.createElement('button');
-            chip.className = 'quick-add-chip';
-            chip.innerHTML = 
-                '<span class="quick-add-chip-name">' + escapeHtml(food.name) + '</span>' +
-                '<span class="quick-add-chip-calories">' + food.calories + ' kcal</span>';
-            
-            chip.addEventListener('click', function() {
-                handleQuickAdd(food);
-            });
-            
-            quickAddChips.appendChild(chip);
+        favorites.forEach(function(fav) {
+            var card = createFavoriteCard(fav);
+            favoritesList.appendChild(card);
         });
     }
 
-    function handleQuickAdd(food) {
-        // Only allow quick add on today
-        if (state.selectedDate !== getTodayKey()) {
-            showToast('Switch to Today to add food', 3000);
-            goToToday();
-            return;
-        }
+    function createFavoriteCard(favorite) {
+        var card = document.createElement('div');
+        card.className = 'favorite-card';
+        card.dataset.id = favorite.id;
         
+        var macrosHtml = 
+            '<span class="favorite-macro calories">' + favorite.calories + ' kcal</span>' +
+            '<span class="favorite-macro">P:' + (favorite.protein || 0).toFixed(0) + 'g</span>' +
+            '<span class="favorite-macro">C:' + (favorite.carbs || 0).toFixed(0) + 'g</span>' +
+            '<span class="favorite-macro">F:' + (favorite.fat || 0).toFixed(0) + 'g</span>';
+        
+        card.innerHTML = 
+            '<div class="favorite-info">' +
+                '<div class="favorite-name">' + escapeHtml(favorite.name) + '</div>' +
+                '<div class="favorite-macros">' + macrosHtml + ' / ' + favorite.quantity + favorite.unit + '</div>' +
+            '</div>' +
+            '<div class="favorite-actions">' +
+                '<button class="favorite-delete-btn" aria-label="Remove from favorites">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<line x1="18" y1="6" x2="6" y2="18"></line>' +
+                        '<line x1="6" y1="6" x2="18" y2="18"></line>' +
+                    '</svg>' +
+                '</button>' +
+            '</div>';
+        
+        // Click card to add to proposed entries with quantity picker
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('.favorite-delete-btn')) return;
+            handleFavoriteClick(favorite);
+        });
+        
+        // Delete button
+        var deleteBtn = card.querySelector('.favorite-delete-btn');
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            handleRemoveFavorite(favorite.id, favorite.name);
+        });
+        
+        return card;
+    }
+
+    function handleFavoriteClick(favorite) {
+        // Show edit modal pre-filled with favorite data, allowing quantity adjustment
         var entry = {
-            name: food.name,
-            quantity: food.quantity,
-            unit: food.unit,
-            calories: food.calories,
-            protein: food.protein || 0,
-            carbs: food.carbs || 0,
-            fat: food.fat || 0
+            name: favorite.name,
+            quantity: favorite.quantity,
+            unit: favorite.unit,
+            calories: favorite.calories,
+            protein: favorite.protein || 0,
+            carbs: favorite.carbs || 0,
+            fat: favorite.fat || 0,
+            fiber: favorite.fiber || 0
         };
         
-        var saved = saveEntry(entry, state.selectedDate);
-        
+        showEditModal(entry, function(updatedEntry) {
+            // Add to proposed entries
+            state.proposedEntries.push(updatedEntry);
+            renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
+            showToast('Added: ' + updatedEntry.name, 2000);
+        }, function() {});
+    }
+
+    function handleRemoveFavorite(favoriteId, name) {
+        var removed = removeFavorite(favoriteId);
+        if (removed) {
+            renderFavorites(document.getElementById('favoritesFilterInput')?.value || '');
+            showToast('Removed from favorites: ' + name, 2000);
+        }
+    }
+
+    function handleAddToFavorites(entry) {
+        var saved = saveFavorite(entry);
         if (saved) {
-            saveRecentFood(entry);
-            refreshDataForDate(state.selectedDate);
-            showToast('Added ' + food.name, 2000);
+            renderFavorites('');
+            showToast('⭐ Added to favorites: ' + entry.name, 2000);
         } else {
-            showToast('Failed to add food', 3000);
+            showToast('Failed to save favorite', 3000);
         }
     }
 
@@ -2216,7 +2307,7 @@ EXAMPLE for "chicken":
         
         updateDateNavigationUI();
         refreshDataForDate(state.selectedDate);
-        renderQuickAddChips();
+        renderFavorites('');
         refreshWeightUI();
         
         loadSettingsIntoForm(state.settings, getApiKey());
@@ -2246,7 +2337,7 @@ EXAMPLE for "chicken":
 
     function refreshData() {
         refreshDataForDate(state.selectedDate);
-        renderQuickAddChips();
+        renderFavorites(document.getElementById('favoritesFilterInput')?.value || '');
     }
 
     function updateMacroSummary(consumed, settings) {
@@ -2553,6 +2644,14 @@ EXAMPLE for "chicken":
         var tabWeight = document.getElementById('tabWeight');
         if (tabFood) tabFood.addEventListener('click', function() { switchView('food'); });
         if (tabWeight) tabWeight.addEventListener('click', function() { switchView('weight'); });
+
+        // Favorites filter input
+        var favoritesFilterInput = document.getElementById('favoritesFilterInput');
+        if (favoritesFilterInput) {
+            favoritesFilterInput.addEventListener('input', function() {
+                renderFavorites(this.value);
+            });
+        }
     }
 
     function setVoiceLanguage(lang) {
