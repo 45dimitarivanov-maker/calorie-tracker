@@ -15,7 +15,8 @@
         SETTINGS: 'calorieTracker_settings',
         API_KEY: 'calorieTracker_apiKey',
         RECENT_FOODS: 'calorieTracker_recentFoods',
-        WEIGHT_ENTRIES: 'calorieTracker_weightEntries'
+        WEIGHT_ENTRIES: 'calorieTracker_weightEntries',
+        FAVORITES: 'calorieTracker_favorites'
     };
 
     const DEFAULT_SETTINGS = {
@@ -244,6 +245,90 @@
         var keys = Object.keys(all).sort();
         var recent = keys.slice(-days);
         return recent.map(function(k) { return { dateKey: k, kg: all[k] }; });
+    }
+
+    // ==========================================
+    // FAVORITES STORAGE & HELPERS
+    // ==========================================
+
+    function getAllFavorites() {
+        try {
+            var data = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+            return data ? JSON.parse(data) : [];
+        } catch (error) {
+            console.error('Error reading favorites:', error);
+            return [];
+        }
+    }
+
+    function saveFavorite(entry) {
+        var favorites = getAllFavorites();
+        
+        // Check if already exists by name (case insensitive)
+        var existingIndex = favorites.findIndex(function(f) {
+            return f.name.toLowerCase() === entry.name.toLowerCase();
+        });
+        
+        var favorite = {
+            id: existingIndex !== -1 ? favorites[existingIndex].id : generateId(),
+            name: entry.name,
+            quantity: entry.quantity || 1,
+            unit: entry.unit || 'serving',
+            calories: entry.calories || 0,
+            protein: entry.protein || 0,
+            carbs: entry.carbs || 0,
+            fat: entry.fat || 0,
+            fiber: entry.fiber || 0,
+            addedAt: existingIndex !== -1 ? favorites[existingIndex].addedAt : new Date().toISOString()
+        };
+        
+        if (existingIndex !== -1) {
+            // Update existing
+            favorites[existingIndex] = favorite;
+        } else {
+            // Add new
+            favorites.unshift(favorite);
+        }
+        
+        try {
+            localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
+            return favorite;
+        } catch (error) {
+            console.error('Error saving favorite:', error);
+            return null;
+        }
+    }
+
+    function removeFavorite(favoriteId) {
+        var favorites = getAllFavorites();
+        var initialLength = favorites.length;
+        favorites = favorites.filter(function(f) { return f.id !== favoriteId; });
+        
+        if (favorites.length === initialLength) {
+            return false;
+        }
+        
+        try {
+            localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
+            return true;
+        } catch (error) {
+            console.error('Error removing favorite:', error);
+            return false;
+        }
+    }
+
+    function isFavorite(name) {
+        var favorites = getAllFavorites();
+        return favorites.some(function(f) {
+            return f.name.toLowerCase() === name.toLowerCase();
+        });
+    }
+
+    function getFavoriteByName(name) {
+        var favorites = getAllFavorites();
+        return favorites.find(function(f) {
+            return f.name.toLowerCase() === name.toLowerCase();
+        });
     }
 
     // ==========================================

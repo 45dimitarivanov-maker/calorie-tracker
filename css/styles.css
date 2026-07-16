@@ -935,8 +935,8 @@ body {
     font-size: 0.8125rem;
 }
 
-/* Quick Add Section */
-.quick-add-section {
+/* Favorites Section */
+.favorites-section {
     margin-bottom: var(--space-lg);
     padding: var(--space-md);
     background-color: var(--color-surface);
@@ -944,62 +944,180 @@ body {
     border: 1px solid var(--color-border);
 }
 
-.quick-add-section[hidden] {
-    display: none !important;
-}
-
-.quick-add-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    margin-bottom: var(--space-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.quick-add-chips {
+.favorites-header {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
 }
 
-.quick-add-chip {
+.favorites-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.favorites-count {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    background-color: var(--color-bg);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+.favorites-filter {
+    margin-bottom: var(--space-sm);
+}
+
+.favorites-filter-input {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-family: var(--font-family);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    transition: all var(--transition-fast);
+}
+
+.favorites-filter-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.favorites-filter-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.favorites-list {
     display: flex;
     flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.favorites-empty {
+    text-align: center;
+    padding: var(--space-lg);
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+}
+
+/* Favorite Card */
+.favorite-card {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: var(--space-sm) var(--space-md);
     background-color: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-fast);
-    min-width: 70px;
 }
 
-.quick-add-chip:hover {
+.favorite-card:hover {
     border-color: var(--color-primary);
     background-color: var(--color-border-light);
+    transform: translateY(-1px);
 }
 
-.quick-add-chip:active {
-    transform: scale(0.95);
+.favorite-card:active {
+    transform: translateY(0);
 }
 
-.quick-add-chip-name {
-    font-size: 0.75rem;
+.favorite-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.favorite-name {
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--color-text);
-    text-align: center;
-    max-width: 80px;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.favorite-macros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: 2px;
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+}
+
+.favorite-macro {
     white-space: nowrap;
 }
 
-.quick-add-chip-calories {
-    font-size: 0.6875rem;
+.favorite-macro.calories {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.favorite-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-left: var(--space-sm);
+}
+
+.favorite-delete-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
     color: var(--color-text-muted);
-    margin-top: 2px;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    opacity: 0;
+}
+
+.favorite-card:hover .favorite-delete-btn {
+    opacity: 1;
+}
+
+.favorite-delete-btn:hover {
+    background-color: var(--color-danger);
+    color: white;
+}
+
+/* Star button for food entries */
+.star-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    color: var(--color-text-muted);
+}
+
+.star-btn:hover {
+    color: #fbbf24;
+    background-color: rgba(251, 191, 36, 0.1);
+}
+
+.star-btn.is-favorite {
+    color: #fbbf24;
+}
+
+.star-btn.is-favorite:hover {
+    color: #f59e0b;
 }
 
 /* Proposed Section */
