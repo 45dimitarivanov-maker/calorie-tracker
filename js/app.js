@@ -119,6 +119,36 @@
         }
     }
 
+    function updateEntry(entryId, updatedData, dateKey) {
+        dateKey = dateKey || getTodayKey();
+        const allEntries = getAllEntries();
+        
+        if (!allEntries[dateKey]) {
+            return null;
+        }
+        
+        const index = allEntries[dateKey].findIndex(entry => entry.id === entryId);
+        if (index === -1) {
+            return null;
+        }
+        
+        // Update the entry while preserving id and timestamp
+        allEntries[dateKey][index] = {
+            ...allEntries[dateKey][index],
+            ...updatedData,
+            id: entryId, // Preserve original ID
+            timestamp: allEntries[dateKey][index].timestamp // Preserve original timestamp
+        };
+        
+        try {
+            localStorage.setItem(STORAGE_KEYS.FOOD_ENTRIES, JSON.stringify(allEntries));
+            return allEntries[dateKey][index];
+        } catch (error) {
+            console.error('Error updating entry:', error);
+            return null;
+        }
+    }
+
     function getTotalCalories(dateKey) {
         const entries = getEntriesForDate(dateKey);
         return entries.reduce((total, entry) => total + (entry.calories || 0), 0);
@@ -398,10 +428,11 @@
         return div.innerHTML;
     }
 
-    function createFoodEntryElement(entry, onDelete) {
+    function createFoodEntryElement(entry, onDelete, onEdit) {
         const div = document.createElement('div');
         div.className = 'food-entry';
         div.dataset.id = entry.id;
+        div.style.cursor = 'pointer';
         
         const quantityText = entry.quantity !== 1 ? entry.quantity + ' ' + entry.unit : entry.unit;
         const hasMacros = entry.protein || entry.carbs || entry.fat;
@@ -430,6 +461,24 @@
                 '</svg>' +
             '</button>';
         
+        // Click on entry info to edit
+        const entryInfo = div.querySelector('.food-entry-info');
+        entryInfo.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (onEdit) {
+                onEdit(entry);
+            }
+        });
+        
+        // Click on calories to edit
+        const caloriesDiv = div.querySelector('.food-entry-calories');
+        caloriesDiv.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (onEdit) {
+                onEdit(entry);
+            }
+        });
+        
         const starBtn = div.querySelector('.star-btn');
         starBtn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -443,7 +492,8 @@
         });
         
         const deleteBtn = div.querySelector('.delete-btn');
-        deleteBtn.addEventListener('click', function() {
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
             if (onDelete) {
                 div.style.transform = 'translateX(100%)';
                 div.style.opacity = '0';
@@ -454,7 +504,7 @@
         return div;
     }
 
-    function renderFoodLog(entries, onDelete) {
+    function renderFoodLog(entries, onDelete, onEdit) {
         const foodLog = document.getElementById('foodLog');
         const emptyState = document.getElementById('emptyState');
         
@@ -473,7 +523,7 @@
         const sortedEntries = entries.slice().reverse();
         
         sortedEntries.forEach(function(entry) {
-            const element = createFoodEntryElement(entry, onDelete);
+            const element = createFoodEntryElement(entry, onDelete, onEdit);
             foodLog.appendChild(element);
         });
     }
@@ -2108,7 +2158,7 @@ EXAMPLE for "chicken":
         var totalCalories = getTotalCalories(dateKey);
         var totalMacros = getTotalMacros(dateKey);
         
-        renderFoodLog(entries, handleDeleteEntry);
+        renderFoodLog(entries, handleDeleteEntry, handleEditEntry);
         updateProgressRing(totalCalories, state.settings.dailyGoal);
         updateMacroSummary(totalMacros, state.settings);
         // Weight card follows selectedDate — refresh whenever date changes
@@ -2960,7 +3010,7 @@ EXAMPLE for "chicken":
     }
 
     function handleDeleteEntry(entryId) {
-        var success = deleteEntry(entryId);
+        var success = deleteEntry(entryId, state.selectedDate);
         
         if (success) {
             refreshData();
@@ -2968,6 +3018,24 @@ EXAMPLE for "chicken":
         } else {
             showToast('Failed to delete entry', 3000);
         }
+    }
+
+    function handleEditEntry(entry) {
+        showEditModal(
+            entry,
+            function(updatedEntry) {
+                // Update the existing entry in storage
+                var updated = updateEntry(entry.id, updatedEntry, state.selectedDate);
+                
+                if (updated) {
+                    refreshData();
+                    showToast('Updated: ' + updatedEntry.name, 2000);
+                } else {
+                    showToast('Failed to update entry', 3000);
+                }
+            },
+            function() {} // onCancel - do nothing
+        );
     }
 
     function handleSaveSettings() {
