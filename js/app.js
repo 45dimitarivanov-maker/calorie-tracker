@@ -609,6 +609,14 @@
     }
 
     function showEditModal(entry, onSave, onCancel) {
+        // Store baseline values for auto-scale calculations
+        var baselineQty = entry.quantity;
+        var baselineCalories = entry.calories;
+        var baselineProtein = entry.protein || 0;
+        var baselineCarbs = entry.carbs || 0;
+        var baselineFat = entry.fat || 0;
+        var baselineFiber = entry.fiber || 0;
+        
         const modalHtml = 
             '<div class="modal-overlay" id="editModal">' +
                 '<div class="modal">' +
@@ -651,6 +659,32 @@
                                 '<label for="editCalories">Calories</label>' +
                                 '<input type="number" class="form-input" id="editCalories" value="' + entry.calories + '" min="0" required>' +
                             '</div>' +
+                            '<div class="form-row">' +
+                                '<div class="form-group" style="flex: 1;">' +
+                                    '<label for="editProtein">Protein (g)</label>' +
+                                    '<input type="number" class="form-input" id="editProtein" value="' + (entry.protein || 0).toFixed(1) + '" min="0" step="0.1">' +
+                                '</div>' +
+                                '<div class="form-group" style="flex: 1;">' +
+                                    '<label for="editCarbs">Carbs (g)</label>' +
+                                    '<input type="number" class="form-input" id="editCarbs" value="' + (entry.carbs || 0).toFixed(1) + '" min="0" step="0.1">' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="form-row">' +
+                                '<div class="form-group" style="flex: 1;">' +
+                                    '<label for="editFat">Fat (g)</label>' +
+                                    '<input type="number" class="form-input" id="editFat" value="' + (entry.fat || 0).toFixed(1) + '" min="0" step="0.1">' +
+                                '</div>' +
+                                '<div class="form-group" style="flex: 1;">' +
+                                    '<label for="editFiber">Fiber (g)</label>' +
+                                    '<input type="number" class="form-input" id="editFiber" value="' + (entry.fiber || 0).toFixed(1) + '" min="0" step="0.1">' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="form-group" style="margin-top: 8px;">' +
+                                '<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">' +
+                                    '<input type="checkbox" id="autoScaleMacros" checked style="cursor: pointer;">' +
+                                    '<span>Auto-scale macros with quantity</span>' +
+                                '</label>' +
+                            '</div>' +
                         '</form>' +
                     '</div>' +
                     '<div class="modal-footer">' +
@@ -666,6 +700,49 @@
         const closeBtn = document.getElementById('closeEditBtn');
         const cancelBtn = document.getElementById('cancelEditBtn');
         const saveBtn = document.getElementById('saveEditBtn');
+        const quantityInput = document.getElementById('editQuantity');
+        const caloriesInput = document.getElementById('editCalories');
+        const proteinInput = document.getElementById('editProtein');
+        const carbsInput = document.getElementById('editCarbs');
+        const fatInput = document.getElementById('editFat');
+        const fiberInput = document.getElementById('editFiber');
+        const autoScaleCheckbox = document.getElementById('autoScaleMacros');
+        
+        // Function to rescale all nutrition values based on quantity ratio
+        function rescaleNutrition() {
+            if (!autoScaleCheckbox.checked) return;
+            
+            var newQty = parseFloat(quantityInput.value) || baselineQty;
+            if (newQty <= 0) return;
+            
+            var ratio = newQty / baselineQty;
+            
+            caloriesInput.value = Math.round(baselineCalories * ratio);
+            proteinInput.value = (baselineProtein * ratio).toFixed(1);
+            carbsInput.value = (baselineCarbs * ratio).toFixed(1);
+            fatInput.value = (baselineFat * ratio).toFixed(1);
+            fiberInput.value = (baselineFiber * ratio).toFixed(1);
+        }
+        
+        // Function to update baseline when user edits a macro field
+        function updateBaseline(field, newValue) {
+            var numValue = parseFloat(newValue) || 0;
+            if (field === 'calories') baselineCalories = numValue;
+            else if (field === 'protein') baselineProtein = numValue;
+            else if (field === 'carbs') baselineCarbs = numValue;
+            else if (field === 'fat') baselineFat = numValue;
+            else if (field === 'fiber') baselineFiber = numValue;
+        }
+        
+        // Attach quantity input listener
+        quantityInput.addEventListener('input', rescaleNutrition);
+        
+        // Attach macro field listeners to update baseline
+        caloriesInput.addEventListener('input', function() { updateBaseline('calories', this.value); });
+        proteinInput.addEventListener('input', function() { updateBaseline('protein', this.value); });
+        carbsInput.addEventListener('input', function() { updateBaseline('carbs', this.value); });
+        fatInput.addEventListener('input', function() { updateBaseline('fat', this.value); });
+        fiberInput.addEventListener('input', function() { updateBaseline('fiber', this.value); });
         
         function closeModal() {
             modal.remove();
@@ -675,9 +752,13 @@
         function saveEntryHandler() {
             var updatedEntry = Object.assign({}, entry, {
                 name: document.getElementById('editFoodName').value.trim(),
-                quantity: parseFloat(document.getElementById('editQuantity').value) || 1,
+                quantity: parseFloat(quantityInput.value) || 1,
                 unit: document.getElementById('editUnit').value,
-                calories: parseInt(document.getElementById('editCalories').value, 10) || 0
+                calories: parseInt(caloriesInput.value, 10) || 0,
+                protein: parseFloat(proteinInput.value) || 0,
+                carbs: parseFloat(carbsInput.value) || 0,
+                fat: parseFloat(fatInput.value) || 0,
+                fiber: parseFloat(fiberInput.value) || 0
             });
             modal.remove();
             if (onSave) onSave(updatedEntry);
