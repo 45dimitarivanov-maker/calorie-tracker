@@ -135,7 +135,7 @@
 
             <!-- Voice/Text Input Section -->
             <section class="voice-section">
-                <div class="input-toggle input-toggle-3">
+                <div class="input-toggle input-toggle-4">
                     <button class="input-toggle-btn active" id="voiceToggle" data-mode="voice">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -148,6 +148,13 @@
                             <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                         </svg>
                         Type
+                    </button>
+                    <button class="input-toggle-btn" id="searchToggle" data-mode="search">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        Search
                     </button>
                     <button class="input-toggle-btn" id="scanToggle" data-mode="scan">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -208,6 +215,32 @@
                         </button>
                     </form>
                     <p class="text-input-hint">Works with Bulgarian food names too! 🇧🇬</p>
+                </div>
+                
+                <!-- Search Database Input -->
+                <div class="search-input-container" id="searchInputContainer" hidden>
+                    <form class="search-form" id="searchForm">
+                        <div class="search-input-row">
+                            <input 
+                                type="text" 
+                                class="search-input-field" 
+                                id="foodSearchInput" 
+                                placeholder="Search food (e.g., ham, chicken, rice...)"
+                                autocomplete="off"
+                            >
+                            <button type="submit" class="btn btn-primary btn-search" id="searchBtn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                Find
+                            </button>
+                        </div>
+                    </form>
+                    <p class="search-hint">Search USDA database · Values per 100g</p>
+                    <div class="search-results" id="searchResults" hidden>
+                        <div class="search-results-list" id="searchResultsList"></div>
+                    </div>
                 </div>
                 
                 <div class="transcription-display" id="transcriptionDisplay" hidden>

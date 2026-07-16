@@ -1528,6 +1528,185 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
     }
 
     // ==========================================
+    // FOOD SEARCH MODULE (USDA FoodData Central API)
+    // ==========================================
+
+    var USDA_API_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+    var USDA_API_KEY = 'DEMO_KEY'; // Free demo key, works with rate limits
+
+    function searchFoodDatabase(query) {
+        if (!query || query.trim().length < 2) {
+            return Promise.resolve([]);
+        }
+
+        var url = USDA_API_URL + '?api_key=' + USDA_API_KEY + 
+            '&query=' + encodeURIComponent(query.trim()) +
+            '&pageSize=15' +
+            '&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)';
+
+        return fetch(url)
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('USDA API error: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (!data.foods || data.foods.length === 0) {
+                    return [];
+                }
+
+                // Map USDA response to our format (per 100g)
+                return data.foods.slice(0, 15).map(function(food) {
+                    var nutrients = food.foodNutrients || [];
+                    
+                    // Find macronutrients by nutrient ID
+                    // Energy: 1008 (kcal), Protein: 1003, Carbs: 1005, Fat: 1004, Fiber: 1079
+                    var calories = findNutrient(nutrients, [1008, 208]) || 0;
+                    var protein = findNutrient(nutrients, [1003, 203]) || 0;
+                    var carbs = findNutrient(nutrients, [1005, 205]) || 0;
+                    var fat = findNutrient(nutrients, [1004, 204]) || 0;
+                    var fiber = findNutrient(nutrients, [1079, 291]) || 0;
+
+                    return {
+                        fdcId: food.fdcId,
+                        name: formatFoodName(food.description),
+                        brand: food.brandName || food.brandOwner || '',
+                        calories: Math.round(calories),
+                        protein: Math.round(protein * 10) / 10,
+                        carbs: Math.round(carbs * 10) / 10,
+                        fat: Math.round(fat * 10) / 10,
+                        fiber: Math.round(fiber * 10) / 10,
+                        dataType: food.dataType
+                    };
+                }).filter(function(food) {
+                    // Filter out items without calorie data
+                    return food.calories > 0;
+                });
+            });
+    }
+
+    function findNutrient(nutrients, ids) {
+        for (var i = 0; i < nutrients.length; i++) {
+            var nutrient = nutrients[i];
+            var nutrientId = nutrient.nutrientId || (nutrient.nutrient && nutrient.nutrient.id);
+            if (ids.indexOf(nutrientId) !== -1) {
+                return nutrient.value || 0;
+            }
+        }
+        return 0;
+    }
+
+    function formatFoodName(description) {
+        if (!description) return 'Unknown Food';
+        // Clean up USDA naming conventions
+        var name = description
+            .replace(/,\s*raw$/i, '')
+            .replace(/,\s*cooked$/i, ' (cooked)')
+            .replace(/,\s*NFS$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        // Capitalize first letter of each word
+        return name.split(' ').map(function(word) {
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    }
+
+    function renderSearchResults(results) {
+        var searchResults = document.getElementById('searchResults');
+        var searchResultsList = document.getElementById('searchResultsList');
+
+        if (!searchResults || !searchResultsList) return;
+
+        searchResultsList.innerHTML = '';
+
+        if (results.length === 0) {
+            searchResults.hidden = false;
+            searchResultsList.innerHTML = '<p class="search-no-results">No foods found. Try a different search term.</p>';
+            return;
+        }
+
+        searchResults.hidden = false;
+
+        results.forEach(function(food) {
+            var card = document.createElement('div');
+            card.className = 'search-result-card';
+            card.dataset.fdcId = food.fdcId;
+
+            var brandHtml = food.brand ? '<div class="search-result-brand">' + escapeHtml(food.brand) + '</div>' : '';
+
+            card.innerHTML = 
+                '<div class="search-result-name">' + escapeHtml(food.name) + '</div>' +
+                brandHtml +
+                '<div class="search-result-macros">' +
+                    '<span class="search-result-macro calories">' + food.calories + ' kcal</span>' +
+                    '<span class="search-result-macro protein">P: ' + food.protein + 'g</span>' +
+                    '<span class="search-result-macro carbs">C: ' + food.carbs + 'g</span>' +
+                    '<span class="search-result-macro fat">F: ' + food.fat + 'g</span>' +
+                '</div>';
+
+            card.addEventListener('click', function() {
+                handleSearchResultClick(food);
+            });
+
+            searchResultsList.appendChild(card);
+        });
+    }
+
+    function handleSearchResultClick(food) {
+        // Create a proposed entry from the search result (per 100g)
+        var entry = {
+            name: food.name,
+            quantity: 100,
+            unit: 'g',
+            calories: food.calories,
+            protein: food.protein,
+            carbs: food.carbs,
+            fat: food.fat,
+            fiber: food.fiber || 0,
+            source: 'usda',
+            fdcId: food.fdcId
+        };
+
+        // Add to proposed entries
+        state.proposedEntries.push(entry);
+        renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
+
+        // Clear search results and input
+        var searchResults = document.getElementById('searchResults');
+        var foodSearchInput = document.getElementById('foodSearchInput');
+        if (searchResults) searchResults.hidden = true;
+        if (foodSearchInput) foodSearchInput.value = '';
+
+        showToast('Added: ' + food.name + ' (100g)', 2000);
+    }
+
+    function handleFoodSearch(e) {
+        e.preventDefault();
+
+        var foodSearchInput = document.getElementById('foodSearchInput');
+        var query = foodSearchInput ? foodSearchInput.value.trim() : '';
+
+        if (query.length < 2) {
+            showToast('Enter at least 2 characters to search', 2000);
+            return;
+        }
+
+        showLoading('Searching USDA database...');
+
+        searchFoodDatabase(query)
+            .then(function(results) {
+                hideLoading();
+                renderSearchResults(results);
+            })
+            .catch(function(error) {
+                hideLoading();
+                console.error('Search error:', error);
+                showToast('Search failed. Please try again.', 3000);
+            });
+    }
+
+    // ==========================================
     // BARCODE SCANNER MODULE (OpenAI Vision API)
     // ==========================================
 
@@ -2116,9 +2295,10 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
             fatGoalInput.addEventListener('input', updateCalculatedCaloriesDisplay);
         }
         
-        // Input mode toggle (voice/text/scan)
+        // Input mode toggle (voice/text/search/scan)
         var voiceToggle = document.getElementById('voiceToggle');
         var textToggle = document.getElementById('textToggle');
+        var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
         var stopScanBtn = document.getElementById('stopScanBtn');
         
@@ -2132,10 +2312,21 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
                 setInputMode('text');
             });
         }
+        if (searchToggle) {
+            searchToggle.addEventListener('click', function() {
+                setInputMode('search');
+            });
+        }
         if (scanToggle) {
             scanToggle.addEventListener('click', function() {
                 setInputMode('scan');
             });
+        }
+        
+        // Search form
+        var searchForm = document.getElementById('searchForm');
+        if (searchForm) {
+            searchForm.addEventListener('submit', handleFoodSearch);
         }
         if (stopScanBtn) {
             stopScanBtn.addEventListener('click', function() {
@@ -2282,20 +2473,30 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
     function setInputMode(mode) {
         var voiceToggle = document.getElementById('voiceToggle');
         var textToggle = document.getElementById('textToggle');
+        var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
         var voiceInputContainer = document.getElementById('voiceInputContainer');
         var textInputContainer = document.getElementById('textInputContainer');
+        var searchInputContainer = document.getElementById('searchInputContainer');
         var scanInputContainer = document.getElementById('scanInputContainer');
         
         // Reset all toggles
         if (voiceToggle) voiceToggle.classList.remove('active');
         if (textToggle) textToggle.classList.remove('active');
+        if (searchToggle) searchToggle.classList.remove('active');
         if (scanToggle) scanToggle.classList.remove('active');
         
         // Hide all containers
         if (voiceInputContainer) voiceInputContainer.hidden = true;
         if (textInputContainer) textInputContainer.hidden = true;
+        if (searchInputContainer) searchInputContainer.hidden = true;
         if (scanInputContainer) scanInputContainer.hidden = true;
+        
+        // Hide search results when switching away from search mode
+        if (mode !== 'search') {
+            var searchResults = document.getElementById('searchResults');
+            if (searchResults) searchResults.hidden = true;
+        }
         
         // Stop scanner if switching away from scan mode
         if (mode !== 'scan' && state.isScannerActive) {
@@ -2311,6 +2512,12 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
             // Focus the text input
             var foodTextInput = document.getElementById('foodTextInput');
             if (foodTextInput) foodTextInput.focus();
+        } else if (mode === 'search') {
+            if (searchToggle) searchToggle.classList.add('active');
+            if (searchInputContainer) searchInputContainer.hidden = false;
+            // Focus the search input
+            var foodSearchInput = document.getElementById('foodSearchInput');
+            if (foodSearchInput) foodSearchInput.focus();
         } else if (mode === 'scan') {
             if (scanToggle) scanToggle.classList.add('active');
             if (scanInputContainer) scanInputContainer.hidden = false;

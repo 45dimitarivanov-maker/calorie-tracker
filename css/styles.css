@@ -529,6 +529,17 @@ body {
     font-size: 0.8125rem;
 }
 
+.input-toggle-4 .input-toggle-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.75rem;
+    gap: 2px;
+}
+
+.input-toggle-4 .input-toggle-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
 .input-toggle-btn {
     display: flex;
     align-items: center;
@@ -681,6 +692,148 @@ body {
     font-size: 0.8125rem;
     color: var(--color-text-muted);
     margin-top: var(--space-sm);
+}
+
+/* Search Input Container */
+.search-input-container {
+    width: 100%;
+    max-width: 360px;
+}
+
+.search-input-container[hidden] {
+    display: none !important;
+}
+
+.search-form {
+    width: 100%;
+}
+
+.search-input-row {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.search-input-field {
+    flex: 1;
+    padding: var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    font-size: 0.9375rem;
+    font-family: var(--font-family);
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    transition: all var(--transition-fast);
+}
+
+.search-input-field:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.search-input-field::placeholder {
+    color: var(--color-text-muted);
+}
+
+.btn-search {
+    padding: var(--space-sm) var(--space-md);
+    white-space: nowrap;
+}
+
+.search-hint {
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    margin-top: var(--space-sm);
+}
+
+/* Search Results */
+.search-results {
+    margin-top: var(--space-md);
+    width: 100%;
+}
+
+.search-results[hidden] {
+    display: none !important;
+}
+
+.search-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.search-result-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.search-result-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.search-result-card:active {
+    transform: translateY(0);
+}
+
+.search-result-name {
+    font-weight: 500;
+    color: var(--color-text);
+    margin-bottom: var(--space-xs);
+    font-size: 0.9375rem;
+    line-height: 1.3;
+}
+
+.search-result-brand {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.search-result-macros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    font-size: 0.8125rem;
+}
+
+.search-result-macro {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--color-text-secondary);
+}
+
+.search-result-macro.calories {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.search-result-macro.protein {
+    color: #10b981;
+}
+
+.search-result-macro.carbs {
+    color: #f59e0b;
+}
+
+.search-result-macro.fat {
+    color: #ef4444;
+}
+
+.search-no-results {
+    text-align: center;
+    padding: var(--space-lg);
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
 }
 
 .voice-btn {
