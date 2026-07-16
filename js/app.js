@@ -1528,222 +1528,121 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
     }
 
     // ==========================================
-    // FOOD SEARCH MODULE (USDA FoodData Central API)
+    // FOOD SEARCH MODULE (AI-Powered)
     // ==========================================
-
-    var USDA_API_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
-    var USDA_API_KEY = 'DEMO_KEY'; // Free demo key, works with rate limits
-    var OFF_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
-
-    // Bulgarian to English food translations for common foods
-    var BG_TO_EN = {
-        'кисело мляко': 'yogurt',
-        'мляко': 'milk',
-        'яйце': 'egg',
-        'яйца': 'eggs',
-        'хляб': 'bread',
-        'сирене': 'feta cheese',
-        'кашкавал': 'yellow cheese',
-        'масло': 'butter',
-        'пилешко': 'chicken',
-        'пиле': 'chicken',
-        'говеждо': 'beef',
-        'свинско': 'pork',
-        'риба': 'fish',
-        'ориз': 'rice',
-        'картофи': 'potato',
-        'домати': 'tomato',
-        'краставици': 'cucumber',
-        'лук': 'onion',
-        'чесън': 'garlic',
-        'банан': 'banana',
-        'ябълка': 'apple',
-        'портокал': 'orange',
-        'кафе': 'coffee',
-        'чай': 'tea',
-        'захар': 'sugar',
-        'сол': 'salt',
-        'олио': 'sunflower oil',
-        'зехтин': 'olive oil',
-        'баница': 'filo pastry cheese pie',
-        'кебапче': 'grilled minced meat',
-        'кюфте': 'meatball',
-        'шопска салата': 'shopska salad tomato cucumber cheese',
-        'таратор': 'cold yogurt cucumber soup',
-        'лютеница': 'pepper tomato spread',
-        'овесени ядки': 'oats',
-        'овесена каша': 'oatmeal'
-    };
-
-    function translateBulgarianFood(query) {
-        var lowerQuery = query.toLowerCase().trim();
-        // Check exact match first
-        if (BG_TO_EN[lowerQuery]) {
-            return BG_TO_EN[lowerQuery];
-        }
-        // Check partial matches
-        for (var bg in BG_TO_EN) {
-            if (lowerQuery.indexOf(bg) !== -1) {
-                return BG_TO_EN[bg];
-            }
-        }
-        return query; // Return original if no translation
-    }
 
     function searchFoodDatabase(query) {
         if (!query || query.trim().length < 2) {
             return Promise.resolve([]);
         }
 
-        // Try to translate Bulgarian to English for better results
-        var translatedQuery = translateBulgarianFood(query);
-        var originalQuery = query.trim();
-        
-        // Search USDA first with translated query
-        return searchUSDA(translatedQuery)
-            .then(function(results) {
-                if (results.length >= 3) {
-                    return results;
-                }
-                // If USDA has few/no results, also search OpenFoodFacts
-                return searchOpenFoodFacts(originalQuery)
-                    .then(function(offResults) {
-                        // Combine results, USDA first, then OFF
-                        var combined = results.concat(offResults);
-                        // Remove duplicates by name similarity
-                        var seen = {};
-                        return combined.filter(function(food) {
-                            var key = food.name.toLowerCase().substring(0, 20);
-                            if (seen[key]) return false;
-                            seen[key] = true;
-                            return true;
-                        }).slice(0, 15);
-                    });
-            });
-    }
-
-    function searchUSDA(query) {
-        var url = USDA_API_URL + '?api_key=' + USDA_API_KEY + 
-            '&query=' + encodeURIComponent(query) +
-            '&pageSize=15' +
-            '&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)';
-
-        return fetch(url)
-            .then(function(response) {
-                if (!response.ok) {
-                    console.warn('USDA API error:', response.status);
-                    return { foods: [] };
-                }
-                return response.json();
-            })
-            .then(function(data) {
-                if (!data.foods || data.foods.length === 0) {
-                    return [];
-                }
-
-                return data.foods.slice(0, 15).map(function(food) {
-                    var nutrients = food.foodNutrients || [];
-                    var calories = findNutrient(nutrients, [1008, 208]) || 0;
-                    var protein = findNutrient(nutrients, [1003, 203]) || 0;
-                    var carbs = findNutrient(nutrients, [1005, 205]) || 0;
-                    var fat = findNutrient(nutrients, [1004, 204]) || 0;
-                    var fiber = findNutrient(nutrients, [1079, 291]) || 0;
-
-                    return {
-                        fdcId: food.fdcId,
-                        name: formatFoodName(food.description),
-                        brand: food.brandName || food.brandOwner || '',
-                        calories: Math.round(calories),
-                        protein: Math.round(protein * 10) / 10,
-                        carbs: Math.round(carbs * 10) / 10,
-                        fat: Math.round(fat * 10) / 10,
-                        fiber: Math.round(fiber * 10) / 10,
-                        source: 'usda'
-                    };
-                }).filter(function(food) {
-                    return food.calories > 0;
-                });
-            })
-            .catch(function(err) {
-                console.warn('USDA search failed:', err);
-                return [];
-            });
-    }
-
-    function searchOpenFoodFacts(query) {
-        var url = OFF_SEARCH_URL + '?search_terms=' + encodeURIComponent(query) +
-            '&search_simple=1&action=process&json=1&page_size=15&fields=product_name,brands,nutriments,code';
-
-        return fetch(url)
-            .then(function(response) {
-                if (!response.ok) {
-                    console.warn('OFF API error:', response.status);
-                    return { products: [] };
-                }
-                return response.json();
-            })
-            .then(function(data) {
-                if (!data.products || data.products.length === 0) {
-                    return [];
-                }
-
-                return data.products.slice(0, 15).map(function(product) {
-                    var n = product.nutriments || {};
-                    var name = product.product_name || 'Unknown';
-                    var brand = product.brands || '';
-                    
-                    // OFF stores per 100g values
-                    var calories = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g'] / 4.184 : 0);
-                    var protein = n['proteins_100g'] || 0;
-                    var carbs = n['carbohydrates_100g'] || 0;
-                    var fat = n['fat_100g'] || 0;
-                    var fiber = n['fiber_100g'] || 0;
-
-                    return {
-                        offCode: product.code,
-                        name: name,
-                        brand: brand,
-                        calories: Math.round(calories),
-                        protein: Math.round(protein * 10) / 10,
-                        carbs: Math.round(carbs * 10) / 10,
-                        fat: Math.round(fat * 10) / 10,
-                        fiber: Math.round(fiber * 10) / 10,
-                        source: 'openfoodfacts'
-                    };
-                }).filter(function(food) {
-                    return food.calories > 0 && food.name && food.name !== 'Unknown';
-                });
-            })
-            .catch(function(err) {
-                console.warn('OFF search failed:', err);
-                return [];
-            });
-    }
-
-    function findNutrient(nutrients, ids) {
-        for (var i = 0; i < nutrients.length; i++) {
-            var nutrient = nutrients[i];
-            var nutrientId = nutrient.nutrientId || (nutrient.nutrient && nutrient.nutrient.id);
-            if (ids.indexOf(nutrientId) !== -1) {
-                return nutrient.value || 0;
-            }
+        var apiKey = getApiKey();
+        if (!apiKey) {
+            return Promise.reject(new Error('OpenAI API key not configured. Please add your API key in Settings.'));
         }
-        return 0;
-    }
 
-    function formatFoodName(description) {
-        if (!description) return 'Unknown Food';
-        // Clean up USDA naming conventions
-        var name = description
-            .replace(/,\s*raw$/i, '')
-            .replace(/,\s*cooked$/i, ' (cooked)')
-            .replace(/,\s*NFS$/i, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        // Capitalize first letter of each word
-        return name.split(' ').map(function(word) {
-            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-        }).join(' ');
+        var systemPrompt = `You are a food nutrition database. Given a food search query (in any language), return 8-10 common variations/forms of that food with their nutrition per 100g.
+
+RULES:
+1. Return different variations of the searched food (e.g., for "chicken": breast, thigh, drumstick, ground, etc.)
+2. Include both raw and cooked versions where relevant
+3. All nutrition values must be per 100g (not per serving)
+4. Use accurate nutrition data based on standard food databases
+5. Keep the food name in the SAME LANGUAGE as the user's query
+6. If the query is in Bulgarian, respond with Bulgarian food names
+7. If the query is in English, respond with English food names
+8. Return ONLY valid JSON — no markdown, no explanation
+
+RETURN FORMAT — JSON array:
+[
+  {
+    "name": "Food name (in user's language)",
+    "description": "Brief description in user's language",
+    "calories": <kcal per 100g>,
+    "protein": <grams per 100g>,
+    "carbs": <grams per 100g>,
+    "fat": <grams per 100g>,
+    "fiber": <grams per 100g>
+  }
+]
+
+EXAMPLE for "кисело мляко" (Bulgarian for yogurt):
+[
+  {"name": "Кисело мляко 2%", "description": "Обикновено кисело мляко", "calories": 63, "protein": 4.3, "carbs": 7.0, "fat": 2.0, "fiber": 0},
+  {"name": "Кисело мляко 3.6%", "description": "Пълномаслено", "calories": 84, "protein": 4.0, "carbs": 6.5, "fat": 3.6, "fiber": 0},
+  {"name": "Гръцко кисело мляко", "description": "Гъсто, цедено", "calories": 97, "protein": 9.0, "carbs": 3.6, "fat": 5.0, "fiber": 0}
+]
+
+EXAMPLE for "chicken":
+[
+  {"name": "Chicken breast, raw", "description": "Skinless, boneless", "calories": 120, "protein": 22.5, "carbs": 0, "fat": 2.6, "fiber": 0},
+  {"name": "Chicken breast, cooked", "description": "Grilled or baked", "calories": 165, "protein": 31, "carbs": 0, "fat": 3.6, "fiber": 0},
+  {"name": "Chicken thigh, raw", "description": "With skin", "calories": 177, "protein": 17.3, "carbs": 0, "fat": 11.5, "fiber": 0}
+]`;
+
+        var userPrompt = 'Search for: "' + query.trim() + '"';
+
+        return fetch(OPENAI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + apiKey
+            },
+            body: JSON.stringify({
+                model: MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.3,
+                max_tokens: 1500
+            })
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                if (response.status === 401) {
+                    throw new Error('Invalid API key.');
+                } else if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Wait a moment.');
+                } else {
+                    throw new Error('API error: ' + response.status);
+                }
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+            if (!content) throw new Error('No response from AI');
+            
+            var jsonStr = content.trim();
+            var jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (jsonMatch) jsonStr = jsonMatch[1].trim();
+            
+            if (!jsonStr.startsWith('[')) {
+                var arrayStart = jsonStr.indexOf('[');
+                var arrayEnd = jsonStr.lastIndexOf(']');
+                if (arrayStart !== -1 && arrayEnd !== -1) {
+                    jsonStr = jsonStr.slice(arrayStart, arrayEnd + 1);
+                }
+            }
+            
+            var items = JSON.parse(jsonStr);
+            
+            return items.map(function(item) {
+                return {
+                    name: (item.name || 'Food').trim(),
+                    brand: (item.description || '').trim(),
+                    calories: Math.round(parseFloat(item.calories) || 0),
+                    protein: Math.round((parseFloat(item.protein) || 0) * 10) / 10,
+                    carbs: Math.round((parseFloat(item.carbs) || 0) * 10) / 10,
+                    fat: Math.round((parseFloat(item.fat) || 0) * 10) / 10,
+                    fiber: Math.round((parseFloat(item.fiber) || 0) * 10) / 10,
+                    source: 'ai'
+                };
+            }).filter(function(food) {
+                return food.calories > 0;
+            });
+        });
     }
 
     function renderSearchResults(results) {
@@ -1826,7 +1725,7 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
             return;
         }
 
-        showLoading('Searching USDA database...');
+        showLoading('Searching foods with AI...');
 
         searchFoodDatabase(query)
             .then(function(results) {
