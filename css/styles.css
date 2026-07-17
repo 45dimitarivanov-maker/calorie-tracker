@@ -442,6 +442,111 @@ body {
     color: var(--color-text-secondary);
 }
 
+.meal-macros {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    margin-left: auto;
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.meal-macros span {
+    white-space: nowrap;
+}
+
+/* Meal Selector Popup */
+.meal-selector-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    z-index: 1000;
+    animation: fadeIn var(--transition-fast);
+}
+
+.meal-selector-popup {
+    background-color: var(--color-surface);
+    border-radius: var(--radius-xl);
+    padding: var(--space-lg);
+    width: 100%;
+    max-width: 320px;
+    box-shadow: var(--shadow-xl);
+    animation: modalSlide var(--transition-normal);
+}
+
+.meal-selector-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+    text-align: center;
+}
+
+.meal-selector-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+}
+
+.meal-selector-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background-color: var(--color-bg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    min-height: 80px;
+}
+
+.meal-selector-btn:hover {
+    border-color: var(--color-primary-light);
+    background-color: var(--color-border-light);
+}
+
+.meal-selector-btn.selected {
+    border-color: var(--color-primary);
+    background-color: rgba(99, 102, 241, 0.1);
+}
+
+.meal-selector-btn.breakfast { border-color: #fbbf24; }
+.meal-selector-btn.breakfast.selected { background-color: rgba(251, 191, 36, 0.15); }
+.meal-selector-btn.lunch { border-color: #22c55e; }
+.meal-selector-btn.lunch.selected { background-color: rgba(34, 197, 94, 0.15); }
+.meal-selector-btn.snack { border-color: #a855f7; }
+.meal-selector-btn.snack.selected { background-color: rgba(168, 85, 247, 0.15); }
+.meal-selector-btn.dinner { border-color: #6366f1; }
+.meal-selector-btn.dinner.selected { background-color: rgba(99, 102, 241, 0.15); }
+
+.meal-selector-icon {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-xs);
+}
+
+.meal-selector-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.meal-selector-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border-light);
+}
+
 .meal-entries {
     border: 1px solid var(--color-border);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);

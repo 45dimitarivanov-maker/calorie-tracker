@@ -35,6 +35,23 @@
         return new Date().toISOString().split('T')[0];
     }
 
+    // Meal Types
+    const MEAL_TYPES = ['breakfast', 'lunch', 'snack', 'dinner'];
+    const MEAL_CONFIG = {
+        breakfast: { icon: '🍳', label: 'Breakfast' },
+        lunch: { icon: '🍽️', label: 'Lunch' },
+        snack: { icon: '🍎', label: 'Snack' },
+        dinner: { icon: '🌙', label: 'Dinner' }
+    };
+
+    function getDefaultMeal() {
+        var hour = new Date().getHours();
+        if (hour >= 5 && hour < 10) return 'breakfast';
+        if (hour >= 10 && hour < 15) return 'lunch';
+        if (hour >= 15 && hour < 17) return 'snack';
+        return 'dinner';
+    }
+
     function getAllEntries() {
         try {
             const data = localStorage.getItem(STORAGE_KEYS.FOOD_ENTRIES);
@@ -510,21 +527,163 @@
         
         if (!foodLog) return;
         
-        const existingEntries = foodLog.querySelectorAll('.food-entry');
-        existingEntries.forEach(function(el) { el.remove(); });
+        // Clear all existing content (meal groups and entries)
+        foodLog.innerHTML = '';
         
         if (entries.length === 0) {
-            if (emptyState) emptyState.hidden = false;
+            if (emptyState) {
+                emptyState.hidden = false;
+                foodLog.appendChild(emptyState);
+            }
             return;
         }
         
         if (emptyState) emptyState.hidden = true;
         
-        const sortedEntries = entries.slice().reverse();
+        // Group entries by meal
+        var groupedEntries = {
+            breakfast: [],
+            lunch: [],
+            snack: [],
+            dinner: []
+        };
         
-        sortedEntries.forEach(function(entry) {
-            const element = createFoodEntryElement(entry, onDelete, onEdit);
-            foodLog.appendChild(element);
+        entries.forEach(function(entry) {
+            var meal = entry.meal || 'snack'; // default to snack for legacy entries
+            if (!groupedEntries[meal]) meal = 'snack';
+            groupedEntries[meal].push(entry);
+        });
+        
+        // Render each meal group
+        MEAL_TYPES.forEach(function(mealType) {
+            var mealEntries = groupedEntries[mealType];
+            var mealGroup = createMealGroupElement(mealType, mealEntries, onDelete, onEdit);
+            foodLog.appendChild(mealGroup);
+        });
+    }
+
+    function createMealGroupElement(mealType, entries, onDelete, onEdit) {
+        var config = MEAL_CONFIG[mealType];
+        var group = document.createElement('div');
+        group.className = 'meal-group ' + mealType;
+        
+        // Calculate totals for this meal
+        var totals = entries.reduce(function(acc, entry) {
+            return {
+                calories: acc.calories + (entry.calories || 0),
+                protein: acc.protein + (entry.protein || 0),
+                carbs: acc.carbs + (entry.carbs || 0),
+                fat: acc.fat + (entry.fat || 0)
+            };
+        }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+        
+        // Create header
+        var header = document.createElement('div');
+        header.className = 'meal-header';
+        
+        var macrosHtml = entries.length > 0 ? 
+            '<div class="meal-macros">' +
+                '<span>P:' + Math.round(totals.protein) + 'g</span>' +
+                '<span>C:' + Math.round(totals.carbs) + 'g</span>' +
+                '<span>F:' + Math.round(totals.fat) + 'g</span>' +
+            '</div>' : '';
+        
+        header.innerHTML = 
+            '<div class="meal-header-left">' +
+                '<span class="meal-icon">' + config.icon + '</span>' +
+                '<span class="meal-name">' + config.label + '</span>' +
+            '</div>' +
+            '<span class="meal-calories">' + totals.calories + ' kcal</span>' +
+            macrosHtml;
+        
+        group.appendChild(header);
+        
+        // Create entries container
+        var entriesContainer = document.createElement('div');
+        entriesContainer.className = 'meal-entries';
+        
+        if (entries.length === 0) {
+            var emptyMsg = document.createElement('p');
+            emptyMsg.className = 'meal-empty';
+            emptyMsg.textContent = 'No food logged';
+            entriesContainer.appendChild(emptyMsg);
+        } else {
+            entries.forEach(function(entry) {
+                var element = createFoodEntryElement(entry, onDelete, onEdit);
+                entriesContainer.appendChild(element);
+            });
+        }
+        
+        group.appendChild(entriesContainer);
+        return group;
+    }
+
+    // Meal selector popup
+    function showMealSelectorPopup(onSelect, onCancel) {
+        var defaultMeal = getDefaultMeal();
+        
+        var popupHtml = 
+            '<div class="meal-selector-overlay" id="mealSelectorPopup">' +
+                '<div class="meal-selector-popup">' +
+                    '<h3 class="meal-selector-title">Select Meal</h3>' +
+                    '<div class="meal-selector-buttons">' +
+                        '<button class="meal-selector-btn breakfast' + (defaultMeal === 'breakfast' ? ' selected' : '') + '" data-meal="breakfast">' +
+                            '<span class="meal-selector-icon">🍳</span>' +
+                            '<span class="meal-selector-label">Breakfast</span>' +
+                        '</button>' +
+                        '<button class="meal-selector-btn lunch' + (defaultMeal === 'lunch' ? ' selected' : '') + '" data-meal="lunch">' +
+                            '<span class="meal-selector-icon">🍽️</span>' +
+                            '<span class="meal-selector-label">Lunch</span>' +
+                        '</button>' +
+                        '<button class="meal-selector-btn snack' + (defaultMeal === 'snack' ? ' selected' : '') + '" data-meal="snack">' +
+                            '<span class="meal-selector-icon">🍎</span>' +
+                            '<span class="meal-selector-label">Snack</span>' +
+                        '</button>' +
+                        '<button class="meal-selector-btn dinner' + (defaultMeal === 'dinner' ? ' selected' : '') + '" data-meal="dinner">' +
+                            '<span class="meal-selector-icon">🌙</span>' +
+                            '<span class="meal-selector-label">Dinner</span>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="meal-selector-actions">' +
+                        '<button class="btn btn-outline" id="mealSelectorCancel">Cancel</button>' +
+                        '<button class="btn btn-primary" id="mealSelectorConfirm">Add</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        
+        document.body.insertAdjacentHTML('beforeend', popupHtml);
+        
+        var popup = document.getElementById('mealSelectorPopup');
+        var selectedMeal = defaultMeal;
+        
+        // Handle meal button clicks
+        var mealBtns = popup.querySelectorAll('.meal-selector-btn');
+        mealBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                mealBtns.forEach(function(b) { b.classList.remove('selected'); });
+                btn.classList.add('selected');
+                selectedMeal = btn.dataset.meal;
+            });
+        });
+        
+        // Cancel button
+        document.getElementById('mealSelectorCancel').addEventListener('click', function() {
+            popup.remove();
+            if (onCancel) onCancel();
+        });
+        
+        // Confirm button
+        document.getElementById('mealSelectorConfirm').addEventListener('click', function() {
+            popup.remove();
+            if (onSelect) onSelect(selectedMeal);
+        });
+        
+        // Click outside to cancel
+        popup.addEventListener('click', function(e) {
+            if (e.target === popup) {
+                popup.remove();
+                if (onCancel) onCancel();
+            }
         });
     }
 
@@ -2919,18 +3078,25 @@ EXAMPLE for "chicken":
         var entry = state.proposedEntries[index];
         if (!entry) return;
         
-        var saved = saveEntry(entry);
-        
-        if (saved) {
-            // Save to recent foods for quick add
-            saveRecentFood(entry);
-            state.proposedEntries.splice(index, 1);
-            renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
-            refreshData();
-            showToast('Added ' + entry.name, 2000);
-        } else {
-            showToast('Failed to save entry', 3000);
-        }
+        // Show meal selector popup
+        showMealSelectorPopup(function(selectedMeal) {
+            entry.meal = selectedMeal;
+            
+            var saved = saveEntry(entry);
+            
+            if (saved) {
+                // Save to recent foods for quick add
+                saveRecentFood(entry);
+                state.proposedEntries.splice(index, 1);
+                renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
+                refreshData();
+                showToast('Added to ' + MEAL_CONFIG[selectedMeal].label + ': ' + entry.name, 2000);
+            } else {
+                showToast('Failed to save entry', 3000);
+            }
+        }, function() {
+            // Cancel - do nothing
+        });
     }
 
     function handleEditProposed(index) {
@@ -2959,22 +3125,28 @@ EXAMPLE for "chicken":
     function handleAddAllProposed() {
         if (state.proposedEntries.length === 0) return;
         
-        // Save all to recent foods first
-        state.proposedEntries.forEach(function(entry) {
-            saveRecentFood(entry);
+        // Show meal selector popup
+        showMealSelectorPopup(function(selectedMeal) {
+            // Add meal type to all entries
+            state.proposedEntries.forEach(function(entry) {
+                entry.meal = selectedMeal;
+                saveRecentFood(entry);
+            });
+            
+            var saved = saveEntries(state.proposedEntries);
+            
+            if (saved.length > 0) {
+                state.proposedEntries = [];
+                renderProposedEntries([], getProposedEntryHandlers());
+                updateTranscription('', false);
+                refreshData();
+                showToast('Added ' + saved.length + ' item' + (saved.length > 1 ? 's' : '') + ' to ' + MEAL_CONFIG[selectedMeal].label, 2000);
+            } else {
+                showToast('Failed to save entries', 3000);
+            }
+        }, function() {
+            // Cancel - do nothing
         });
-        
-        var saved = saveEntries(state.proposedEntries);
-        
-        if (saved.length > 0) {
-            state.proposedEntries = [];
-            renderProposedEntries([], getProposedEntryHandlers());
-            updateTranscription('', false);
-            refreshData();
-            showToast('Added ' + saved.length + ' item' + (saved.length > 1 ? 's' : ''), 2000);
-        } else {
-            showToast('Failed to save entries', 3000);
-        }
     }
 
     function handleManualEntry(e) {
@@ -2984,6 +3156,7 @@ EXAMPLE for "chicken":
         var calories = parseInt(document.getElementById('foodCalories').value, 10);
         var quantity = parseFloat(document.getElementById('foodQuantity').value) || 1;
         var unit = document.getElementById('foodUnit').value;
+        var meal = document.getElementById('foodMeal').value;
         
         if (!name || isNaN(calories)) {
             showToast('Please enter food name and calories', 3000);
@@ -2994,7 +3167,8 @@ EXAMPLE for "chicken":
             name: name,
             calories: calories,
             quantity: quantity,
-            unit: unit
+            unit: unit,
+            meal: meal
         };
         
         var saved = saveEntry(entry);
@@ -3003,7 +3177,7 @@ EXAMPLE for "chicken":
             resetManualEntryForm();
             toggleManualEntryForm(false);
             refreshData();
-            showToast('Added ' + name, 2000);
+            showToast('Added to ' + MEAL_CONFIG[meal].label + ': ' + name, 2000);
         } else {
             showToast('Failed to save entry', 3000);
         }
