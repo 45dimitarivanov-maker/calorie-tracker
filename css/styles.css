@@ -440,12 +440,12 @@ body {
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-text-secondary);
+    margin-right: var(--space-sm);
 }
 
 .meal-macros {
     font-size: 0.6875rem;
     color: var(--color-text-muted);
-    margin-left: auto;
     display: flex;
     gap: var(--space-xs);
 }

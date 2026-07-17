@@ -2470,7 +2470,7 @@ EXAMPLE for "chicken":
     }
 
     function handleFavoriteClick(favorite) {
-        // Show edit modal pre-filled with favorite data, allowing quantity adjustment
+        // Show edit modal pre-filled with favorite data, then meal selector, then save directly
         var entry = {
             name: favorite.name,
             quantity: favorite.quantity,
@@ -2483,11 +2483,25 @@ EXAMPLE for "chicken":
         };
         
         showEditModal(entry, function(updatedEntry) {
-            // Add to proposed entries
-            state.proposedEntries.push(updatedEntry);
-            renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
-            showToast('Added: ' + updatedEntry.name, 2000);
-        }, function() {});
+            // After editing, show meal selector and save directly
+            showMealSelectorPopup(function(selectedMeal) {
+                updatedEntry.meal = selectedMeal;
+                
+                var saved = saveEntry(updatedEntry);
+                
+                if (saved) {
+                    saveRecentFood(updatedEntry);
+                    refreshData();
+                    showToast('Added to ' + MEAL_CONFIG[selectedMeal].label + ': ' + updatedEntry.name, 2000);
+                } else {
+                    showToast('Failed to save entry', 3000);
+                }
+            }, function() {
+                // User cancelled meal selection - do nothing
+            });
+        }, function() {
+            // User cancelled edit - do nothing
+        });
     }
 
     function handleRemoveFavorite(favoriteId, name) {
