@@ -3171,6 +3171,9 @@ EXAMPLE for "chicken":
         var quantity = parseFloat(document.getElementById('foodQuantity').value) || 1;
         var unit = document.getElementById('foodUnit').value;
         var meal = document.getElementById('foodMeal').value;
+        var protein = parseFloat(document.getElementById('foodProtein').value) || 0;
+        var carbs = parseFloat(document.getElementById('foodCarbs').value) || 0;
+        var fat = parseFloat(document.getElementById('foodFat').value) || 0;
         
         if (!name || isNaN(calories)) {
             showToast('Please enter food name and calories', 3000);
@@ -3182,7 +3185,10 @@ EXAMPLE for "chicken":
             calories: calories,
             quantity: quantity,
             unit: unit,
-            meal: meal
+            meal: meal,
+            protein: protein,
+            carbs: carbs,
+            fat: fat
         };
         
         var saved = saveEntry(entry);
