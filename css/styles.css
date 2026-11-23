@@ -645,6 +645,25 @@ body {
     height: 14px;
 }
 
+.input-toggle-5 .input-toggle-btn {
+    padding: var(--space-xs) 4px;
+    font-size: 0.6875rem;
+    gap: 2px;
+}
+
+.input-toggle-5 .input-toggle-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+/* On very narrow phones, drop the icons so 5 labels still fit */
+@media (max-width: 360px) {
+    .input-toggle-5 .input-toggle-btn svg {
+        display: none;
+    }
+}
+
 .input-toggle-btn {
     display: flex;
     align-items: center;
@@ -745,6 +764,33 @@ body {
     font-size: 0.875rem;
     color: var(--color-text-secondary);
     margin-bottom: var(--space-md);
+    text-align: center;
+}
+
+.meal-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+.meal-input-container[hidden] {
+    display: none !important;
+}
+
+.meal-hint {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-sm);
+    text-align: center;
+}
+
+.meal-subhint {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
     text-align: center;
 }
 

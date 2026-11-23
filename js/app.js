@@ -1436,33 +1436,40 @@ ESTIMATION GUIDELINES (base on standard nutritional databases):
         .then(function(data) {
             var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
             if (!content) throw new Error('No response from AI');
-            
-            var jsonStr = content.trim();
-            var jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (jsonMatch) jsonStr = jsonMatch[1].trim();
-            
-            if (!jsonStr.startsWith('[')) {
-                var arrayStart = jsonStr.indexOf('[');
-                var arrayEnd = jsonStr.lastIndexOf(']');
-                if (arrayStart !== -1 && arrayEnd !== -1) {
-                    jsonStr = jsonStr.slice(arrayStart, arrayEnd + 1);
-                }
+            return parseFoodItemsFromJson(content);
+        });
+    }
+
+    // Shared parser: extract a JSON array of food items from an AI response and
+    // sanitize each item into the canonical entry shape. Used by both the text
+    // (parseFoodDescription) and meal-photo (recognizeMealPhoto) flows.
+    function parseFoodItemsFromJson(content) {
+        var jsonStr = content.trim();
+        var jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+        if (!jsonStr.startsWith('[')) {
+            var arrayStart = jsonStr.indexOf('[');
+            var arrayEnd = jsonStr.lastIndexOf(']');
+            if (arrayStart !== -1 && arrayEnd !== -1) {
+                jsonStr = jsonStr.slice(arrayStart, arrayEnd + 1);
             }
-            
-            var items = JSON.parse(jsonStr);
-            
-            return items.map(function(item) {
-                return {
-                    name: (item.name || 'Food').trim(),
-                    quantity: parseFloat(item.quantity) || 1,
-                    unit: item.unit || 'serving',
-                    calories: parseInt(item.calories, 10) || 0,
-                    protein: parseFloat(item.protein) || 0,
-                    carbs: parseFloat(item.carbs) || 0,
-                    fat: parseFloat(item.fat) || 0,
-                    notes: (item.notes || '').trim()
-                };
-            });
+        }
+
+        var items = JSON.parse(jsonStr);
+
+        return items.map(function(item) {
+            return {
+                name: (item.name || 'Food').trim(),
+                quantity: parseFloat(item.quantity) || 1,
+                unit: item.unit || 'serving',
+                calories: parseInt(item.calories, 10) || 0,
+                protein: parseFloat(item.protein) || 0,
+                carbs: parseFloat(item.carbs) || 0,
+                fat: parseFloat(item.fat) || 0,
+                fiber: parseFloat(item.fiber) || 0,
+                notes: (item.notes || '').trim()
+            };
         });
     }
 
@@ -2250,6 +2257,112 @@ EXAMPLE for "chicken":
     }
 
     // ==========================================
+    // MEAL PHOTO RECOGNITION MODULE (OpenAI Vision API)
+    // ==========================================
+
+    function recognizeMealPhoto(file) {
+        var apiKey = getApiKey();
+        if (!apiKey) {
+            showToast('Please add your OpenAI API key in Settings first', 4000);
+            toggleSettingsModal(true);
+            return;
+        }
+
+        var systemPrompt = `You are a precise nutrition assistant with food-recognition vision. Identify every distinct food and drink item visible in the photo and return its estimated macronutrients.
+
+RULES:
+1. Identify EACH distinct food item separately — a plate with chicken, rice, and salad returns 3 items
+2. Estimate a realistic serving weight in grams from visual cues (plate/utensil size, typical portions)
+3. Return calories AND full macronutrients (protein, carbs, fat, fiber) for the estimated quantity shown
+4. For composite dishes, break into main components where it improves accuracy
+5. Understand Bulgarian dishes too (баница, шопска салата, кебапче, кюфте, мусака, лютеница, etc.)
+6. If the image contains no recognizable food, return an empty JSON array []
+7. Return ONLY valid JSON — no markdown, no explanation
+
+RETURN FORMAT — JSON array:
+[
+  {
+    "name": "Food name (properly capitalized)",
+    "quantity": <number>,
+    "unit": "g|ml|piece|serving|cup",
+    "calories": <total kcal for the estimated quantity>,
+    "protein": <grams of protein>,
+    "carbs": <grams of carbohydrates>,
+    "fat": <grams of fat>,
+    "fiber": <grams of fiber>
+  }
+]
+
+Round all macros to 1 decimal place. When unsure between portions, use the smaller (conservative) estimate.`;
+
+        showLoading('Recognizing your meal...');
+
+        var reader = new FileReader();
+        reader.onload = function() {
+            var dataUrl = reader.result;
+
+            fetch(OPENAI_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + apiKey
+                },
+                body: JSON.stringify({
+                    model: MODEL,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: 'Identify the foods in this photo and return the JSON array with calories and macros (protein, carbs, fat, fiber in grams).' },
+                                { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+                            ]
+                        }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 1000
+                })
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    if (response.status === 401) throw new Error('Invalid API key.');
+                    if (response.status === 429) throw new Error('Rate limit exceeded.');
+                    return response.text().then(function(text) {
+                        throw new Error('API error: ' + response.status);
+                    });
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                hideLoading();
+                var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (!content) throw new Error('No response from AI');
+
+                var items = parseFoodItemsFromJson(content);
+
+                if (!items || items.length === 0) {
+                    showToast('No food recognized. Try a clearer photo.', 4000);
+                    return;
+                }
+
+                state.proposedEntries = state.proposedEntries.concat(items);
+                renderProposedEntries(state.proposedEntries, getProposedEntryHandlers());
+                showToast('Found ' + items.length + ' food item' + (items.length > 1 ? 's' : ''), 2000);
+            })
+            .catch(function(error) {
+                hideLoading();
+                console.error('Meal photo recognition error:', error);
+                showToast(error.message || 'Failed to recognize meal.', 4000);
+            });
+        };
+        reader.onerror = function() {
+            hideLoading();
+            showToast('Failed to read photo', 3000);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // ==========================================
     // DATE NAVIGATION HELPERS
     // ==========================================
 
@@ -2732,6 +2845,7 @@ EXAMPLE for "chicken":
         var textToggle = document.getElementById('textToggle');
         var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
+        var mealToggle = document.getElementById('mealToggle');
         var stopScanBtn = document.getElementById('stopScanBtn');
         
         if (voiceToggle) {
@@ -2752,6 +2866,11 @@ EXAMPLE for "chicken":
         if (scanToggle) {
             scanToggle.addEventListener('click', function() {
                 setInputMode('scan');
+            });
+        }
+        if (mealToggle) {
+            mealToggle.addEventListener('click', function() {
+                setInputMode('meal');
             });
         }
         
@@ -2775,6 +2894,18 @@ EXAMPLE for "chicken":
                 if (file) {
                     handleBarcodePhoto(file);
                     barcodePhotoInput.value = '';
+                }
+            });
+        }
+
+        // Photo capture for meal recognition
+        var mealPhotoInput = document.getElementById('mealPhotoInput');
+        if (mealPhotoInput) {
+            mealPhotoInput.addEventListener('change', function(e) {
+                var file = e.target.files && e.target.files[0];
+                if (file) {
+                    recognizeMealPhoto(file);
+                    mealPhotoInput.value = '';
                 }
             });
         }
@@ -2915,22 +3046,26 @@ EXAMPLE for "chicken":
         var textToggle = document.getElementById('textToggle');
         var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
+        var mealToggle = document.getElementById('mealToggle');
         var voiceInputContainer = document.getElementById('voiceInputContainer');
         var textInputContainer = document.getElementById('textInputContainer');
         var searchInputContainer = document.getElementById('searchInputContainer');
         var scanInputContainer = document.getElementById('scanInputContainer');
-        
+        var mealInputContainer = document.getElementById('mealInputContainer');
+
         // Reset all toggles
         if (voiceToggle) voiceToggle.classList.remove('active');
         if (textToggle) textToggle.classList.remove('active');
         if (searchToggle) searchToggle.classList.remove('active');
         if (scanToggle) scanToggle.classList.remove('active');
-        
+        if (mealToggle) mealToggle.classList.remove('active');
+
         // Hide all containers
         if (voiceInputContainer) voiceInputContainer.hidden = true;
         if (textInputContainer) textInputContainer.hidden = true;
         if (searchInputContainer) searchInputContainer.hidden = true;
         if (scanInputContainer) scanInputContainer.hidden = true;
+        if (mealInputContainer) mealInputContainer.hidden = true;
         
         // Hide search results when switching away from search mode
         if (mode !== 'search') {
@@ -2963,6 +3098,9 @@ EXAMPLE for "chicken":
             if (scanInputContainer) scanInputContainer.hidden = false;
             // Start the barcode scanner
             startBarcodeScanner();
+        } else if (mode === 'meal') {
+            if (mealToggle) mealToggle.classList.add('active');
+            if (mealInputContainer) mealInputContainer.hidden = false;
         }
     }
 

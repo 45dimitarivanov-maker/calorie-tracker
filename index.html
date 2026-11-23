@@ -135,7 +135,7 @@
 
             <!-- Voice/Text Input Section -->
             <section class="voice-section">
-                <div class="input-toggle input-toggle-4">
+                <div class="input-toggle input-toggle-5">
                     <button class="input-toggle-btn active" id="voiceToggle" data-mode="voice">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -166,6 +166,13 @@
                         </svg>
                         Scan
                     </button>
+                    <button class="input-toggle-btn" id="mealToggle" data-mode="meal">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                        Meal
+                    </button>
                 </div>
                 
                 <!-- Voice Input -->
@@ -194,6 +201,16 @@
                     <input type="file" id="barcodePhotoInput" accept="image/*" capture="environment" style="display: none;">
                     
                     <button class="btn btn-outline" id="stopScanBtn" style="margin-top: 8px; width: 100%;">Cancel</button>
+                </div>
+
+                <!-- Meal Photo Recognition (AI-powered) -->
+                <div class="meal-input-container" id="mealInputContainer" hidden>
+                    <p class="meal-hint">📸 Take a photo of your meal — AI identifies the foods and estimates macros</p>
+
+                    <label for="mealPhotoInput" class="btn btn-primary" style="display: block; width: 100%; box-sizing: border-box; text-align: center; margin: 16px 0 8px; padding: 16px; font-size: 16px; cursor: pointer;">📷 Take Photo of Meal</label>
+                    <input type="file" id="mealPhotoInput" accept="image/*" capture="environment" style="display: none;">
+
+                    <p class="meal-subhint">Works best with a clear, well-lit photo from above</p>
                 </div>
                 
                 <!-- Text Input -->
