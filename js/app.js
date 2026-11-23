@@ -2272,7 +2272,7 @@ EXAMPLE for "chicken":
 
 RULES:
 1. Identify EACH distinct food item separately — a plate with chicken, rice, and salad returns 3 items
-2. Estimate a realistic serving weight in grams from visual cues (plate/utensil size, typical portions)
+2. Estimate a realistic serving weight in grams from visual cues (plate/utensil size, typical portions). If a size reference is visible (fork, spoon, hand, standard plate), use it to calibrate the portion weight
 3. Return calories AND full macronutrients (protein, carbs, fat, fiber) for the estimated quantity shown
 4. For composite dishes, break into main components where it improves accuracy
 5. Understand Bulgarian dishes too (баница, шопска салата, кебапче, кюфте, мусака, лютеница, etc.)
