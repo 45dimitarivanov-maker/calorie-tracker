@@ -445,7 +445,7 @@
         return div.innerHTML;
     }
 
-    function createFoodEntryElement(entry, onDelete, onEdit) {
+    function createFoodEntryElement(entry, onDelete, onEdit, onCopy) {
         const div = document.createElement('div');
         div.className = 'food-entry';
         div.dataset.id = entry.id;
@@ -470,6 +470,13 @@
                 '</div>' +
             '</div>' +
             '<div class="food-entry-calories">' + entry.calories + ' <span>kcal</span></div>' +
+            (onCopy ?
+                '<button class="copy-btn" aria-label="Copy to today">' +
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>' +
+                        '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' +
+                    '</svg>' +
+                '</button>' : '') +
             '<button class="' + starClass + '" aria-label="' + (isAlreadyFavorite ? 'Already in favorites' : 'Add to favorites') + '">' + starIcon + '</button>' +
             '<button class="delete-btn" aria-label="Delete entry">' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
@@ -508,6 +515,14 @@
             }
         });
         
+        var copyBtn = div.querySelector('.copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (onCopy) onCopy({ type: 'item', entry: entry });
+            });
+        }
+
         const deleteBtn = div.querySelector('.delete-btn');
         deleteBtn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -521,7 +536,7 @@
         return div;
     }
 
-    function renderFoodLog(entries, onDelete, onEdit) {
+    function renderFoodLog(entries, onDelete, onEdit, onCopy) {
         const foodLog = document.getElementById('foodLog');
         const emptyState = document.getElementById('emptyState');
         
@@ -557,12 +572,12 @@
         // Render each meal group
         MEAL_TYPES.forEach(function(mealType) {
             var mealEntries = groupedEntries[mealType];
-            var mealGroup = createMealGroupElement(mealType, mealEntries, onDelete, onEdit);
+            var mealGroup = createMealGroupElement(mealType, mealEntries, onDelete, onEdit, onCopy);
             foodLog.appendChild(mealGroup);
         });
     }
 
-    function createMealGroupElement(mealType, entries, onDelete, onEdit) {
+    function createMealGroupElement(mealType, entries, onDelete, onEdit, onCopy) {
         var config = MEAL_CONFIG[mealType];
         var group = document.createElement('div');
         group.className = 'meal-group ' + mealType;
@@ -588,15 +603,35 @@
                 '<span>F:' + Math.round(totals.fat) + 'g</span>' +
             '</div>' : '';
         
-        header.innerHTML = 
+        var copyHtml = (onCopy && entries.length > 0) ?
+            '<button class="meal-copy-btn" aria-label="Copy ' + config.label + ' to today">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                    '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>' +
+                    '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>' +
+                '</svg>' +
+                '<span>Copy to today</span>' +
+            '</button>' : '';
+
+        header.innerHTML =
             '<div class="meal-header-left">' +
                 '<span class="meal-icon">' + config.icon + '</span>' +
                 '<span class="meal-name">' + config.label + '</span>' +
             '</div>' +
             '<span class="meal-calories">' + totals.calories + ' kcal</span>' +
-            macrosHtml;
-        
+            macrosHtml +
+            copyHtml;
+
         group.appendChild(header);
+
+        if (onCopy && entries.length > 0) {
+            var mealCopyBtn = header.querySelector('.meal-copy-btn');
+            if (mealCopyBtn) {
+                mealCopyBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    onCopy({ type: 'meal', mealType: mealType, entries: entries });
+                });
+            }
+        }
         
         // Create entries container
         var entriesContainer = document.createElement('div');
@@ -609,7 +644,7 @@
             entriesContainer.appendChild(emptyMsg);
         } else {
             entries.forEach(function(entry) {
-                var element = createFoodEntryElement(entry, onDelete, onEdit);
+                var element = createFoodEntryElement(entry, onDelete, onEdit, onCopy);
                 entriesContainer.appendChild(element);
             });
         }
@@ -784,7 +819,11 @@
         
         toastMessage.textContent = message;
         toast.hidden = false;
-        
+
+        // Drop any leftover Undo link from a prior undo toast
+        var strayUndo = toast.querySelector('.toast-undo');
+        if (strayUndo) strayUndo.remove();
+
         if (toast.timeoutId) {
             clearTimeout(toast.timeoutId);
         }
@@ -792,6 +831,44 @@
         toast.timeoutId = setTimeout(function() {
             toast.hidden = true;
         }, duration);
+    }
+
+    // Toast variant with an inline "Undo" action link.
+    function showUndoToast(message, onUndo, duration) {
+        duration = duration || 6000;
+        var toast = document.getElementById('toast');
+        var toastMessage = document.getElementById('toastMessage');
+
+        if (!toast || !toastMessage) return;
+
+        toastMessage.textContent = message;
+
+        // Remove any previous undo link, then add a fresh one
+        var prevLink = toast.querySelector('.toast-undo');
+        if (prevLink) prevLink.remove();
+
+        var undoLink = document.createElement('button');
+        undoLink.className = 'toast-undo';
+        undoLink.textContent = 'Undo';
+        toast.appendChild(undoLink);
+
+        toast.hidden = false;
+
+        if (toast.timeoutId) clearTimeout(toast.timeoutId);
+
+        function cleanup() {
+            toast.hidden = true;
+            if (undoLink.parentNode) undoLink.remove();
+        }
+
+        undoLink.addEventListener('click', function(e) {
+            e.stopPropagation();
+            clearTimeout(toast.timeoutId);
+            cleanup();
+            if (onUndo) onUndo();
+        });
+
+        toast.timeoutId = setTimeout(cleanup, duration);
     }
 
     function setVoiceButtonState(isListening) {
@@ -2429,8 +2506,11 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         var entries = getEntriesForDate(dateKey);
         var totalCalories = getTotalCalories(dateKey);
         var totalMacros = getTotalMacros(dateKey);
-        
-        renderFoodLog(entries, handleDeleteEntry, handleEditEntry);
+
+        // Copy-to-today is only offered when viewing a past day
+        var onCopy = dateKey < getTodayKey() ? handleCopyToToday : null;
+
+        renderFoodLog(entries, handleDeleteEntry, handleEditEntry, onCopy);
         updateProgressRing(totalCalories, state.settings.dailyGoal);
         updateMacroSummary(totalMacros, state.settings);
         // Weight card follows selectedDate — refresh whenever date changes
@@ -3368,6 +3448,47 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
             },
             function() {} // onCancel - do nothing
         );
+    }
+
+    // Copy a past day's meal or a single item into TODAY, under its original meal.
+    function handleCopyToToday(payload) {
+        if (!payload) return;
+
+        var sourceEntries = payload.type === 'meal' ? (payload.entries || []) : [payload.entry];
+        sourceEntries = sourceEntries.filter(Boolean);
+        if (sourceEntries.length === 0) return;
+
+        // Build clean copies: drop id/timestamp so saveEntries assigns fresh ones;
+        // keep the meal (default to snack for legacy entries, matching render grouping).
+        var copies = sourceEntries.map(function(entry) {
+            var copy = Object.assign({}, entry);
+            delete copy.id;
+            delete copy.timestamp;
+            copy.meal = copy.meal || 'snack';
+            return copy;
+        });
+
+        var saved = saveEntries(copies, getTodayKey());
+        if (!saved || saved.length === 0) {
+            showToast('Failed to copy', 3000);
+            return;
+        }
+
+        refreshData();
+
+        var label = payload.type === 'meal'
+            ? MEAL_CONFIG[payload.mealType].label
+            : sourceEntries[0].name;
+        var message = payload.type === 'meal'
+            ? 'Copied ' + label + ' (' + saved.length + ' item' + (saved.length > 1 ? 's' : '') + ') to today'
+            : 'Copied "' + label + '" to today';
+
+        var savedIds = saved.map(function(e) { return e.id; });
+        showUndoToast(message, function() {
+            savedIds.forEach(function(id) { deleteEntry(id, getTodayKey()); });
+            refreshData();
+            showToast('Copy undone', 2000);
+        });
     }
 
     function handleSaveSettings() {
