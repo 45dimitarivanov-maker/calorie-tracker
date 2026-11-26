@@ -135,7 +135,7 @@
 
             <!-- Voice/Text Input Section -->
             <section class="voice-section">
-                <div class="input-toggle input-toggle-5">
+                <div class="input-toggle input-toggle-6">
                     <button class="input-toggle-btn active" id="voiceToggle" data-mode="voice">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -172,6 +172,13 @@
                             <circle cx="12" cy="13" r="4"></circle>
                         </svg>
                         Meal
+                    </button>
+                    <button class="input-toggle-btn" id="labelToggle" data-mode="label">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                        Label
                     </button>
                 </div>
                 
@@ -215,6 +222,16 @@
                         <li>💡 Shoot from above in good light, with each food clearly separated</li>
                         <li>✏️ Grams and macros are estimates — tap any suggestion to adjust before adding</li>
                     </ul>
+                </div>
+
+                <!-- Nutrition Label Recognition (AI-powered) -->
+                <div class="label-input-container" id="labelInputContainer" hidden>
+                    <p class="label-hint">🏷️ Photograph the nutrition table — AI reads the per-100g values, then asks how much you ate</p>
+
+                    <label for="labelPhotoInput" class="btn btn-primary" style="display: block; width: 100%; box-sizing: border-box; text-align: center; margin: 16px 0 8px; padding: 16px; font-size: 16px; cursor: pointer;">📷 Take Photo of Label</label>
+                    <input type="file" id="labelPhotoInput" accept="image/*" capture="environment" style="display: none;">
+
+                    <p class="label-subhint">Make sure the numbers column is sharp and readable</p>
                 </div>
                 
                 <!-- Text Input -->

@@ -664,6 +664,24 @@ body {
     }
 }
 
+/* 6 modes: wrap into 2 rows of 3 */
+.input-toggle-6 {
+    flex-wrap: wrap;
+}
+
+.input-toggle-6 .input-toggle-btn {
+    flex: 1 0 30%;
+    padding: var(--space-xs) 4px;
+    font-size: 0.75rem;
+    gap: 3px;
+}
+
+.input-toggle-6 .input-toggle-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
 .input-toggle-btn {
     display: flex;
     align-items: center;
@@ -802,6 +820,60 @@ body {
     line-height: 1.4;
     color: var(--color-text-secondary);
     text-align: left;
+}
+
+.label-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+.label-input-container[hidden] {
+    display: none !important;
+}
+
+.label-hint {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-sm);
+    text-align: center;
+}
+
+.label-subhint {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
+    text-align: center;
+}
+
+/* Grams + meal combined popup extras (reuses .meal-selector-* styles) */
+.grams-input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+}
+
+.grams-input-group label {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+}
+
+.grams-input-group .form-input {
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.grams-preview {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+    margin-bottom: var(--space-md);
 }
 
 .text-input-container {

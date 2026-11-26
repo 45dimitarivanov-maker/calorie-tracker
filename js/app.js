@@ -722,6 +722,95 @@
         });
     }
 
+    // Combined "how many grams + which meal" popup, used after reading a nutrition
+    // label (per-100g). One confirm logs the scaled entry. onConfirm(grams, meal).
+    function showGramsMealPopup(per100, onConfirm, onCancel) {
+        var defaultMeal = getDefaultMeal();
+        var defaultGrams = 100;
+
+        function mealBtnHtml(meal, icon, label) {
+            return '<button class="meal-selector-btn ' + meal + (defaultMeal === meal ? ' selected' : '') + '" data-meal="' + meal + '">' +
+                '<span class="meal-selector-icon">' + icon + '</span>' +
+                '<span class="meal-selector-label">' + label + '</span>' +
+            '</button>';
+        }
+
+        var popupHtml =
+            '<div class="meal-selector-overlay" id="gramsMealPopup">' +
+                '<div class="meal-selector-popup">' +
+                    '<h3 class="meal-selector-title">' + escapeHtml(per100.name) + '</h3>' +
+                    '<div class="grams-input-group">' +
+                        '<label for="gramsInput">How many grams did you eat?</label>' +
+                        '<input type="number" class="form-input" id="gramsInput" value="' + defaultGrams + '" min="1" step="1" inputmode="numeric">' +
+                    '</div>' +
+                    '<p class="grams-preview" id="gramsPreview"></p>' +
+                    '<div class="meal-selector-buttons">' +
+                        mealBtnHtml('breakfast', '🍳', 'Breakfast') +
+                        mealBtnHtml('lunch', '🍽️', 'Lunch') +
+                        mealBtnHtml('snack', '🍎', 'Snack') +
+                        mealBtnHtml('dinner', '🌙', 'Dinner') +
+                    '</div>' +
+                    '<div class="meal-selector-actions">' +
+                        '<button class="btn btn-outline" id="gramsMealCancel">Cancel</button>' +
+                        '<button class="btn btn-primary" id="gramsMealConfirm">Add</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+        document.body.insertAdjacentHTML('beforeend', popupHtml);
+
+        var popup = document.getElementById('gramsMealPopup');
+        var selectedMeal = defaultMeal;
+        var gramsInput = document.getElementById('gramsInput');
+        var preview = document.getElementById('gramsPreview');
+
+        function updatePreview() {
+            var g = parseFloat(gramsInput.value) || 0;
+            var r = g / 100;
+            preview.textContent =
+                Math.round((per100.calories || 0) * r) + ' kcal · ' +
+                'P ' + ((per100.protein || 0) * r).toFixed(1) + 'g · ' +
+                'C ' + ((per100.carbs || 0) * r).toFixed(1) + 'g · ' +
+                'F ' + ((per100.fat || 0) * r).toFixed(1) + 'g';
+        }
+        updatePreview();
+        gramsInput.addEventListener('input', updatePreview);
+
+        var mealBtns = popup.querySelectorAll('.meal-selector-btn');
+        mealBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                mealBtns.forEach(function(b) { b.classList.remove('selected'); });
+                btn.classList.add('selected');
+                selectedMeal = btn.dataset.meal;
+            });
+        });
+
+        document.getElementById('gramsMealCancel').addEventListener('click', function() {
+            popup.remove();
+            if (onCancel) onCancel();
+        });
+
+        document.getElementById('gramsMealConfirm').addEventListener('click', function() {
+            var grams = parseFloat(gramsInput.value);
+            if (isNaN(grams) || grams <= 0) {
+                showToast('Enter a valid amount in grams', 2500);
+                return;
+            }
+            popup.remove();
+            if (onConfirm) onConfirm(grams, selectedMeal);
+        });
+
+        popup.addEventListener('click', function(e) {
+            if (e.target === popup) {
+                popup.remove();
+                if (onCancel) onCancel();
+            }
+        });
+
+        gramsInput.focus();
+        gramsInput.select();
+    }
+
     function createProposedEntryElement(entry, index, handlers) {
         const div = document.createElement('div');
         div.className = 'proposed-entry';
@@ -2440,6 +2529,136 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
     }
 
     // ==========================================
+    // NUTRITION LABEL RECOGNITION MODULE (OpenAI Vision API)
+    // ==========================================
+
+    function recognizeNutritionLabel(file) {
+        var apiKey = getApiKey();
+        if (!apiKey) {
+            showToast('Please add your OpenAI API key in Settings first', 4000);
+            toggleSettingsModal(true);
+            return;
+        }
+
+        var systemPrompt = `You read packaged-food nutrition labels. Extract the nutrition values and return them normalized to PER 100g (or per 100ml for liquids).
+
+RULES:
+1. Return a SINGLE-item JSON array describing the product per 100g/100ml
+2. If the label only gives per-serving values, convert to per-100g using the stated serving size
+3. "name" = the product name if visible on the packaging, otherwise "Food"
+4. "quantity" = 100, "unit" = "g" (use "ml" only for clearly liquid products)
+5. calories/protein/carbs/fat/fiber are the amounts PER 100g/100ml
+6. If no readable nutrition table is present, return []
+7. Return ONLY valid JSON — no markdown, no explanation
+
+RETURN FORMAT — JSON array with exactly one object:
+[
+  {
+    "name": "Product name",
+    "quantity": 100,
+    "unit": "g",
+    "calories": <kcal per 100g>,
+    "protein": <g per 100g>,
+    "carbs": <g per 100g>,
+    "fat": <g per 100g>,
+    "fiber": <g per 100g>
+  }
+]
+
+Round macros to 1 decimal place.`;
+
+        showLoading('Reading nutrition label...');
+
+        var reader = new FileReader();
+        reader.onload = function() {
+            var dataUrl = reader.result;
+
+            fetch(OPENAI_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + apiKey
+                },
+                body: JSON.stringify({
+                    model: MODEL,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: 'Read this nutrition label and return the per-100g JSON array.' },
+                                { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+                            ]
+                        }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 500
+                })
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    if (response.status === 401) throw new Error('Invalid API key.');
+                    if (response.status === 429) throw new Error('Rate limit exceeded.');
+                    return response.text().then(function(text) {
+                        throw new Error('API error: ' + response.status);
+                    });
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                hideLoading();
+                var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (!content) throw new Error('No response from AI');
+
+                var items = parseFoodItemsFromJson(content);
+                if (!items || items.length === 0 || !items[0].calories) {
+                    showToast("Couldn't read the label. Try a sharper photo.", 4000);
+                    return;
+                }
+
+                var per100 = items[0];
+                // Normalize to a per-100 basis so grams math is exact
+                per100.quantity = 100;
+                if (per100.unit !== 'ml') per100.unit = 'g';
+
+                // Single combined prompt: grams + meal, then log directly.
+                showGramsMealPopup(per100, function(grams, meal) {
+                    var ratio = grams / 100;
+                    var entry = {
+                        name: per100.name,
+                        quantity: grams,
+                        unit: per100.unit,
+                        calories: Math.round((per100.calories || 0) * ratio),
+                        protein: Math.round((per100.protein || 0) * ratio * 10) / 10,
+                        carbs: Math.round((per100.carbs || 0) * ratio * 10) / 10,
+                        fat: Math.round((per100.fat || 0) * ratio * 10) / 10,
+                        fiber: Math.round((per100.fiber || 0) * ratio * 10) / 10,
+                        meal: meal,
+                        source: 'label'
+                    };
+                    if (saveEntry(entry)) {
+                        saveRecentFood(entry);
+                        refreshData();
+                        showToast('Added to ' + MEAL_CONFIG[meal].label + ': ' + entry.name, 2000);
+                    } else {
+                        showToast('Failed to save entry', 3000);
+                    }
+                }, function() { /* cancelled */ });
+            })
+            .catch(function(error) {
+                hideLoading();
+                console.error('Nutrition label recognition error:', error);
+                showToast(error.message || 'Failed to read label.', 4000);
+            });
+        };
+        reader.onerror = function() {
+            hideLoading();
+            showToast('Failed to read photo', 3000);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // ==========================================
     // DATE NAVIGATION HELPERS
     // ==========================================
 
@@ -2926,6 +3145,7 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
         var mealToggle = document.getElementById('mealToggle');
+        var labelToggle = document.getElementById('labelToggle');
         var stopScanBtn = document.getElementById('stopScanBtn');
         
         if (voiceToggle) {
@@ -2951,6 +3171,11 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         if (mealToggle) {
             mealToggle.addEventListener('click', function() {
                 setInputMode('meal');
+            });
+        }
+        if (labelToggle) {
+            labelToggle.addEventListener('click', function() {
+                setInputMode('label');
             });
         }
         
@@ -2986,6 +3211,18 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
                 if (file) {
                     recognizeMealPhoto(file);
                     mealPhotoInput.value = '';
+                }
+            });
+        }
+
+        // Photo capture for nutrition label recognition
+        var labelPhotoInput = document.getElementById('labelPhotoInput');
+        if (labelPhotoInput) {
+            labelPhotoInput.addEventListener('change', function(e) {
+                var file = e.target.files && e.target.files[0];
+                if (file) {
+                    recognizeNutritionLabel(file);
+                    labelPhotoInput.value = '';
                 }
             });
         }
@@ -3127,11 +3364,13 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         var searchToggle = document.getElementById('searchToggle');
         var scanToggle = document.getElementById('scanToggle');
         var mealToggle = document.getElementById('mealToggle');
+        var labelToggle = document.getElementById('labelToggle');
         var voiceInputContainer = document.getElementById('voiceInputContainer');
         var textInputContainer = document.getElementById('textInputContainer');
         var searchInputContainer = document.getElementById('searchInputContainer');
         var scanInputContainer = document.getElementById('scanInputContainer');
         var mealInputContainer = document.getElementById('mealInputContainer');
+        var labelInputContainer = document.getElementById('labelInputContainer');
 
         // Reset all toggles
         if (voiceToggle) voiceToggle.classList.remove('active');
@@ -3139,6 +3378,7 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         if (searchToggle) searchToggle.classList.remove('active');
         if (scanToggle) scanToggle.classList.remove('active');
         if (mealToggle) mealToggle.classList.remove('active');
+        if (labelToggle) labelToggle.classList.remove('active');
 
         // Hide all containers
         if (voiceInputContainer) voiceInputContainer.hidden = true;
@@ -3146,6 +3386,7 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         if (searchInputContainer) searchInputContainer.hidden = true;
         if (scanInputContainer) scanInputContainer.hidden = true;
         if (mealInputContainer) mealInputContainer.hidden = true;
+        if (labelInputContainer) labelInputContainer.hidden = true;
         
         // Hide search results when switching away from search mode
         if (mode !== 'search') {
@@ -3181,6 +3422,9 @@ Round all macros to 1 decimal place. When unsure between portions, use the small
         } else if (mode === 'meal') {
             if (mealToggle) mealToggle.classList.add('active');
             if (mealInputContainer) mealInputContainer.hidden = false;
+        } else if (mode === 'label') {
+            if (labelToggle) labelToggle.classList.add('active');
+            if (labelInputContainer) labelInputContainer.hidden = false;
         }
     }
 
